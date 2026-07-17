@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dm-jcr-reproduction"
+version = "0.1.0"
+description = "Reproduction of the DM-JCR resource allocation method"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["dm_jcr*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

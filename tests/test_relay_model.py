@@ -15,7 +15,7 @@ from dm_jcr.task_model import (
 
 def make_relay_task():
     return ComputationTask(
-        input_data_bits=kilobytes_to_bits(100.0),
+        input_bits=kilobytes_to_bits(100.0),
         cpu_cycles=1.0e9,
         max_latency_s=0.6,
         output_ratio=0.1,

@@ -6,7 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from dm_jcr.task_model import (
-    DEFAULT_CAPACITANCE_COEFFICIENT,
+    DEFAULT_CPU_ENERGY_COEFFICIENT,
     ComputationTask,
     computation_time_s,
     dynamic_cpu_energy_j,
@@ -135,8 +135,8 @@ def forwarding_cpu_cycles(
 def evaluate_relay_task(
     task: ComputationTask,
     resources: RelayLinkResources,
-    capacitance_coefficient: float = (
-        DEFAULT_CAPACITANCE_COEFFICIENT
+    energy_coefficient: float = (
+        DEFAULT_CPU_ENERGY_COEFFICIENT
     ),
 ) -> RelayTaskMetrics:
     """
@@ -145,14 +145,14 @@ def evaluate_relay_task(
     对应论文公式 (12)、(13) 的 relay 分支。
     """
     input_forwarding_cycles = forwarding_cpu_cycles(
-        data_bits=task.input_data_bits,
+        data_bits=task.input_bits,
         forwarding_cycles_per_bit=(
             resources.forwarding_cycles_per_bit
         ),
     )
 
     output_forwarding_cycles = forwarding_cpu_cycles(
-        data_bits=task.output_data_bits,
+        data_bits=task.output_bits,
         forwarding_cycles_per_bit=(
             resources.forwarding_cycles_per_bit
         ),
@@ -161,14 +161,14 @@ def evaluate_relay_task(
     # ---------- 时延部分 ----------
 
     vehicle_to_uav_time = transmission_time_s(
-        data_bits=task.input_data_bits,
+        data_bits=task.input_bits,
         rate_bps=(
             resources.vehicle_to_uav_rate_bps
         ),
     )
 
     uav_to_node_time = transmission_time_s(
-        data_bits=task.input_data_bits,
+        data_bits=task.input_bits,
         rate_bps=resources.uav_to_node_rate_bps,
     )
 
@@ -194,12 +194,12 @@ def evaluate_relay_task(
     )
 
     node_to_uav_time = transmission_time_s(
-        data_bits=task.output_data_bits,
+        data_bits=task.output_bits,
         rate_bps=resources.node_to_uav_rate_bps,
     )
 
     uav_to_vehicle_time = transmission_time_s(
-        data_bits=task.output_data_bits,
+        data_bits=task.output_bits,
         rate_bps=(
             resources.uav_to_vehicle_rate_bps
         ),
@@ -234,8 +234,8 @@ def evaluate_relay_task(
         cpu_frequency_hz=(
             resources.uav_cpu_frequency_hz
         ),
-        capacitance_coefficient=(
-            capacitance_coefficient
+        energy_coefficient=(
+            energy_coefficient
         ),
     )
 
@@ -244,8 +244,8 @@ def evaluate_relay_task(
         cpu_frequency_hz=(
             resources.node_cpu_frequency_hz
         ),
-        capacitance_coefficient=(
-            capacitance_coefficient
+        energy_coefficient=(
+            energy_coefficient
         ),
     )
 
@@ -254,8 +254,8 @@ def evaluate_relay_task(
         cpu_frequency_hz=(
             resources.uav_cpu_frequency_hz
         ),
-        capacitance_coefficient=(
-            capacitance_coefficient
+        energy_coefficient=(
+            energy_coefficient
         ),
     )
 
@@ -352,8 +352,8 @@ def relay_task_latency_s(
 def relay_task_energy_j(
     task: ComputationTask,
     resources: RelayLinkResources,
-    capacitance_coefficient: float = (
-        DEFAULT_CAPACITANCE_COEFFICIENT
+    energy_coefficient: float = (
+        DEFAULT_CPU_ENERGY_COEFFICIENT
     ),
 ) -> float:
     """
@@ -362,8 +362,8 @@ def relay_task_energy_j(
     metrics = evaluate_relay_task(
         task=task,
         resources=resources,
-        capacitance_coefficient=(
-            capacitance_coefficient
+        energy_coefficient=(
+            energy_coefficient
         ),
     )
 

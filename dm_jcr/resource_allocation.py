@@ -1,13 +1,16 @@
-"""
-联合通信/计算资源分配，对应方程（17）和（27）。
-此处固定由 :mod:dm_jcr.offloading 生成的任务到节点的映射。对于每个已映射的任务，一种策略会分配三种连续资源：
+"""用于方程（17）和（27）的联合通信/计算资源分配。
+
+本模块中，由 :mod:dm_jcr.offloading 生成的任务到节点的映射关系是固定的。对于每个已映射的任务，一种分配策略会分配三种连续资源：
+
 带宽 b；
+
 边缘CPU频率 f；
+
 边缘节点发射功率 p。
 
-论文采用了比例归一化（方程（27）），使得每个节点上的分配都满足问题（17）中的总带宽、CPU和功率约束。该模块实现了该投影，并利用代码库中已有的信道和任务模型，对由此产生的直传任务进行评估。
-中继分配有意留待下一增量处理：中继任务需要在两个节点（中继无人机和执行节点）上占用资源，而直传任务仅在其所选执行节点上消耗资源。
-"""
+论文采用比例归一化方法（方程（27）），使得每个节点上的资源分配均满足问题（17）中的总带宽、CPU和功率约束。本模块实现了该投影操作，并利用代码库中已有的信道模型和任务模型，对由此产生的直连任务进行评估。
+
+中继分配则有意留待下一次增量更新：中继任务需要两个节点上的资源（中继无人机和执行节点），而直连任务仅消耗其选定执行节点上的资源。"""
 
 from __future__ import annotations
 
@@ -535,4 +538,418 @@ __all__ = [
     "project_resource_strategy",
     "proportional_normalize",
     "verify_resource_constraints",
+]
+
+# ---------------------------------------------------------------------------
+# Complete equation-(17) support: direct computation, relayed computation,
+# and UAV-assisted V2V communication tasks (equations 14-15).
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class V2VRelayTaskContext:
+    """Fixed environment for one UAV-assisted V2V communication task.
+
+    This is the task type selected by ``m_{v,v*,k}=1`` in equation (17).
+    The task carries data from one vehicle to another through one relay UAV;
+    no edge-node computation is performed.
+    """
+
+    task_id: str
+    source_vehicle_id: str
+    target_vehicle_id: str
+    relay_uav_id: str
+    data_bits: float
+    max_latency_s: float
+    vehicle_to_uav_channel_gain: float
+    uav_to_vehicle_channel_gain: float
+    source_vehicle_transmit_power_w: float
+    noise_psd_w_hz: float
+    forwarding_cycles_per_bit: float
+    vehicle_to_uav_interference_power_w: float = 0.0
+    uav_to_vehicle_interference_power_w: float = 0.0
+
+    def __post_init__(self) -> None:
+        for name in ("task_id", "source_vehicle_id", "target_vehicle_id", "relay_uav_id"):
+            object.__setattr__(self, name, _clean_identifier(name, getattr(self, name)))
+        if self.source_vehicle_id == self.target_vehicle_id:
+            raise ValueError("source_vehicle_id and target_vehicle_id must differ")
+        for name in (
+            "data_bits", "max_latency_s", "vehicle_to_uav_channel_gain",
+            "uav_to_vehicle_channel_gain", "noise_psd_w_hz",
+        ):
+            object.__setattr__(self, name, _finite_positive(name, getattr(self, name)))
+        for name in (
+            "source_vehicle_transmit_power_w", "forwarding_cycles_per_bit",
+            "vehicle_to_uav_interference_power_w", "uav_to_vehicle_interference_power_w",
+        ):
+            object.__setattr__(self, name, _finite_non_negative(name, getattr(self, name)))
+
+
+@dataclass(frozen=True)
+class RawV2VRelayAllocation:
+    """Unconstrained scores for equations (14)-(15)."""
+
+    task_id: str
+    relay_uav_id: str
+    vehicle_to_uav_bandwidth_score: float
+    uav_to_vehicle_bandwidth_score: float
+    relay_cpu_score: float
+    relay_power_score: float
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "task_id", _clean_identifier("task_id", self.task_id))
+        object.__setattr__(self, "relay_uav_id", _clean_identifier("relay_uav_id", self.relay_uav_id))
+        for name in (
+            "vehicle_to_uav_bandwidth_score", "uav_to_vehicle_bandwidth_score",
+            "relay_cpu_score", "relay_power_score",
+        ):
+            object.__setattr__(self, name, _finite_non_negative(name, getattr(self, name)))
+
+
+@dataclass(frozen=True)
+class FeasibleV2VRelayAllocation:
+    """Projected physical resources for a UAV-assisted V2V task."""
+
+    task_id: str
+    relay_uav_id: str
+    vehicle_to_uav_bandwidth_hz: float
+    uav_to_vehicle_bandwidth_hz: float
+    relay_cpu_frequency_hz: float
+    relay_transmit_power_w: float
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "task_id", _clean_identifier("task_id", self.task_id))
+        object.__setattr__(self, "relay_uav_id", _clean_identifier("relay_uav_id", self.relay_uav_id))
+        for name in (
+            "vehicle_to_uav_bandwidth_hz", "uav_to_vehicle_bandwidth_hz",
+            "relay_cpu_frequency_hz",
+        ):
+            object.__setattr__(self, name, _finite_positive(name, getattr(self, name)))
+        object.__setattr__(self, "relay_transmit_power_w", _finite_non_negative(
+            "relay_transmit_power_w", self.relay_transmit_power_w
+        ))
+
+    @property
+    def relay_bandwidth_total_hz(self) -> float:
+        return float(self.vehicle_to_uav_bandwidth_hz + self.uav_to_vehicle_bandwidth_hz)
+
+
+@dataclass(frozen=True)
+class V2VRelayTaskMetrics:
+    vehicle_to_uav_time_s: float
+    forwarding_time_s: float
+    uav_to_vehicle_time_s: float
+    total_latency_s: float
+    vehicle_to_uav_energy_j: float
+    forwarding_energy_j: float
+    uav_to_vehicle_energy_j: float
+    total_energy_j: float
+    deadline_satisfied: bool
+
+
+@dataclass(frozen=True)
+class V2VRelayTaskEvaluation:
+    task_id: str
+    relay_uav_id: str
+    allocation: FeasibleV2VRelayAllocation
+    vehicle_to_uav_rate_bps: float
+    uav_to_vehicle_rate_bps: float
+    metrics: V2VRelayTaskMetrics
+    normalized_latency: float
+    normalized_energy: float
+
+
+@dataclass(frozen=True)
+class Equation17ProjectedStrategy:
+    """One projected strategy containing every task type in equation (17)."""
+
+    direct_allocations: tuple[FeasibleTaskAllocation, ...]
+    relay_computation_allocations: tuple[object, ...]
+    v2v_relay_allocations: tuple[FeasibleV2VRelayAllocation, ...]
+
+    def __post_init__(self) -> None:
+        ids = [x.task_id for x in self.direct_allocations]
+        ids += [x.task_id for x in self.relay_computation_allocations]
+        ids += [x.task_id for x in self.v2v_relay_allocations]
+        if not ids:
+            raise ValueError("at least one allocation is required")
+        if len(ids) != len(set(ids)):
+            raise ValueError("task_id values must be unique across all task types")
+
+
+@dataclass(frozen=True)
+class Equation17Evaluation:
+    direct_tasks: tuple[TaskAllocationEvaluation, ...]
+    relay_computation_tasks: tuple[object, ...]
+    v2v_relay_tasks: tuple[V2VRelayTaskEvaluation, ...]
+    mean_normalized_latency: float
+    mean_normalized_energy: float
+    weighted_objective: float
+    resource_constraints_satisfied: bool
+    deadline_constraints_satisfied: bool
+
+    @property
+    def feasible(self) -> bool:
+        return self.resource_constraints_satisfied and self.deadline_constraints_satisfied
+
+    @property
+    def task_count(self) -> int:
+        return len(self.direct_tasks) + len(self.relay_computation_tasks) + len(self.v2v_relay_tasks)
+
+
+def evaluate_v2v_relay_task(
+    context: V2VRelayTaskContext,
+    allocation: FeasibleV2VRelayAllocation,
+    *,
+    energy_coefficient: float = DEFAULT_CPU_ENERGY_COEFFICIENT,
+) -> V2VRelayTaskMetrics:
+    """Evaluate equations (14) and (15) for one V2V relay task."""
+
+    if context.task_id != allocation.task_id or context.relay_uav_id != allocation.relay_uav_id:
+        raise ValueError("V2V context and allocation mapping do not match")
+    energy_coefficient = _finite_non_negative("energy_coefficient", energy_coefficient)
+
+    r_vu = achievable_rate_bps(
+        bandwidth_hz=allocation.vehicle_to_uav_bandwidth_hz,
+        transmit_power_w=context.source_vehicle_transmit_power_w,
+        channel_gain=context.vehicle_to_uav_channel_gain,
+        noise_psd_w_hz=context.noise_psd_w_hz,
+        interference_power_w=context.vehicle_to_uav_interference_power_w,
+    )
+    r_uv = achievable_rate_bps(
+        bandwidth_hz=allocation.uav_to_vehicle_bandwidth_hz,
+        transmit_power_w=allocation.relay_transmit_power_w,
+        channel_gain=context.uav_to_vehicle_channel_gain,
+        noise_psd_w_hz=context.noise_psd_w_hz,
+        interference_power_w=context.uav_to_vehicle_interference_power_w,
+    )
+    if r_vu <= _EPSILON or r_uv <= _EPSILON:
+        raise ValueError("V2V relay rates must be greater than zero")
+
+    t_vu = context.data_bits / r_vu
+    forwarding_cycles = context.forwarding_cycles_per_bit * context.data_bits
+    t_forward = forwarding_cycles / allocation.relay_cpu_frequency_hz
+    t_uv = context.data_bits / r_uv
+    total_t = t_vu + t_forward + t_uv
+
+    e_vu = context.source_vehicle_transmit_power_w * t_vu
+    e_forward = energy_coefficient * allocation.relay_cpu_frequency_hz**2 * forwarding_cycles
+    e_uv = allocation.relay_transmit_power_w * t_uv
+    total_e = e_vu + e_forward + e_uv
+    return V2VRelayTaskMetrics(
+        vehicle_to_uav_time_s=float(t_vu),
+        forwarding_time_s=float(t_forward),
+        uav_to_vehicle_time_s=float(t_uv),
+        total_latency_s=float(total_t),
+        vehicle_to_uav_energy_j=float(e_vu),
+        forwarding_energy_j=float(e_forward),
+        uav_to_vehicle_energy_j=float(e_uv),
+        total_energy_j=float(total_e),
+        deadline_satisfied=bool(total_t <= context.max_latency_s),
+    )
+
+
+def project_equation17_strategy(
+    direct_raw_allocations: Iterable[RawTaskAllocation],
+    relay_computation_raw_allocations: Iterable[object],
+    v2v_relay_raw_allocations: Iterable[RawV2VRelayAllocation],
+    capacities: Iterable[NodeResourceCapacity],
+) -> Equation17ProjectedStrategy:
+    """Project all equation-(17) task types onto shared node budgets.
+
+    Relayed-computation allocation objects are ``RawRelayTaskAllocation`` from
+    :mod:`dm_jcr.relay_resource_allocation`.  A local import avoids a circular
+    import while retaining backwards compatibility with the direct-only API.
+    """
+
+    from dm_jcr.relay_resource_allocation import FeasibleRelayTaskAllocation, RawRelayTaskAllocation
+
+    direct = tuple(direct_raw_allocations)
+    relay = tuple(relay_computation_raw_allocations)
+    v2v = tuple(v2v_relay_raw_allocations)
+    if any(not isinstance(x, RawRelayTaskAllocation) for x in relay):
+        raise TypeError("relay_computation_raw_allocations must contain RawRelayTaskAllocation")
+    all_ids = [x.task_id for x in direct] + [x.task_id for x in relay] + [x.task_id for x in v2v]
+    if not all_ids:
+        raise ValueError("at least one raw allocation is required")
+    if len(all_ids) != len(set(all_ids)):
+        raise ValueError("task_id values must be unique across all task types")
+
+    capacity_by_node = _index_capacities(capacities)
+    direct_values = [dict() for _ in direct]
+    relay_values = [dict() for _ in relay]
+    v2v_values = [dict() for _ in v2v]
+    slots = {"bandwidth": {}, "cpu": {}, "power": {}}
+
+    def add(kind: str, node: str, owner: str, index: int, field: str, score: float) -> None:
+        if node not in capacity_by_node:
+            raise ValueError(f"missing capacity for node {node!r}")
+        slots[kind].setdefault(node, []).append((owner, index, field, score))
+
+    for i, x in enumerate(direct):
+        add("bandwidth", x.node_id, "d", i, "bandwidth_hz", x.bandwidth_score)
+        add("cpu", x.node_id, "d", i, "cpu_frequency_hz", x.cpu_score)
+        add("power", x.node_id, "d", i, "node_transmit_power_w", x.power_score)
+    for i, x in enumerate(relay):
+        add("bandwidth", x.relay_uav_id, "r", i, "vehicle_to_uav_bandwidth_hz", x.vehicle_to_uav_bandwidth_score)
+        add("bandwidth", x.relay_uav_id, "r", i, "uav_to_node_bandwidth_hz", x.uav_to_node_bandwidth_score)
+        add("bandwidth", x.relay_uav_id, "r", i, "uav_to_vehicle_bandwidth_hz", x.uav_to_vehicle_bandwidth_score)
+        add("bandwidth", x.compute_node_id, "r", i, "node_to_uav_bandwidth_hz", x.node_to_uav_bandwidth_score)
+        add("cpu", x.relay_uav_id, "r", i, "relay_cpu_frequency_hz", x.relay_cpu_score)
+        add("cpu", x.compute_node_id, "r", i, "compute_cpu_frequency_hz", x.compute_cpu_score)
+        add("power", x.relay_uav_id, "r", i, "relay_transmit_power_w", x.relay_power_score)
+        add("power", x.compute_node_id, "r", i, "compute_node_transmit_power_w", x.compute_node_power_score)
+    for i, x in enumerate(v2v):
+        add("bandwidth", x.relay_uav_id, "v", i, "vehicle_to_uav_bandwidth_hz", x.vehicle_to_uav_bandwidth_score)
+        add("bandwidth", x.relay_uav_id, "v", i, "uav_to_vehicle_bandwidth_hz", x.uav_to_vehicle_bandwidth_score)
+        add("cpu", x.relay_uav_id, "v", i, "relay_cpu_frequency_hz", x.relay_cpu_score)
+        add("power", x.relay_uav_id, "v", i, "relay_transmit_power_w", x.relay_power_score)
+
+    attr = {"bandwidth": "total_bandwidth_hz", "cpu": "total_cpu_frequency_hz", "power": "total_transmit_power_w"}
+    targets = {"d": direct_values, "r": relay_values, "v": v2v_values}
+    for kind, by_node in slots.items():
+        for node, node_slots in by_node.items():
+            values = proportional_normalize((s[3] for s in node_slots), getattr(capacity_by_node[node], attr[kind]))
+            for (owner, index, field, _), value in zip(node_slots, values, strict=True):
+                targets[owner][index][field] = float(value)
+
+    direct_out = tuple(FeasibleTaskAllocation(x.task_id, x.node_id, **direct_values[i]) for i, x in enumerate(direct))
+    relay_out = tuple(FeasibleRelayTaskAllocation(
+        task_id=x.task_id, relay_uav_id=x.relay_uav_id, compute_node_id=x.compute_node_id, **relay_values[i]
+    ) for i, x in enumerate(relay))
+    v2v_out = tuple(FeasibleV2VRelayAllocation(
+        task_id=x.task_id, relay_uav_id=x.relay_uav_id, **v2v_values[i]
+    ) for i, x in enumerate(v2v))
+    return Equation17ProjectedStrategy(direct_out, relay_out, v2v_out)
+
+
+def equation17_resource_totals(strategy: Equation17ProjectedStrategy) -> dict[str, tuple[float, float, float]]:
+    totals: dict[str, np.ndarray] = {}
+    def add(node: str, b: float, f: float, p: float) -> None:
+        totals.setdefault(node, np.zeros(3, dtype=np.float64))
+        totals[node] += (b, f, p)
+    for x in strategy.direct_allocations:
+        add(x.node_id, x.bandwidth_hz, x.cpu_frequency_hz, x.node_transmit_power_w)
+    for x in strategy.relay_computation_allocations:
+        add(x.relay_uav_id, x.relay_bandwidth_total_hz, x.relay_cpu_frequency_hz, x.relay_transmit_power_w)
+        add(x.compute_node_id, x.compute_node_bandwidth_total_hz, x.compute_cpu_frequency_hz, x.compute_node_transmit_power_w)
+    for x in strategy.v2v_relay_allocations:
+        add(x.relay_uav_id, x.relay_bandwidth_total_hz, x.relay_cpu_frequency_hz, x.relay_transmit_power_w)
+    return {k: tuple(float(v) for v in values) for k, values in totals.items()}
+
+
+def verify_equation17_resource_constraints(
+    strategy: Equation17ProjectedStrategy,
+    capacities: Iterable[NodeResourceCapacity],
+    *, tolerance: float = 1e-8,
+) -> bool:
+    tolerance = _finite_non_negative("tolerance", tolerance)
+    cap = _index_capacities(capacities)
+    for node, values in equation17_resource_totals(strategy).items():
+        if node not in cap:
+            return False
+        limits = (cap[node].total_bandwidth_hz, cap[node].total_cpu_frequency_hz, cap[node].total_transmit_power_w)
+        if any(value < -tolerance or value - limit > tolerance for value, limit in zip(values, limits)):
+            return False
+    return True
+
+
+def evaluate_equation17_strategy(
+    direct_contexts: Iterable[DirectTaskContext],
+    relay_computation_contexts: Iterable[object],
+    v2v_relay_contexts: Iterable[V2VRelayTaskContext],
+    strategy: Equation17ProjectedStrategy,
+    capacities: Iterable[NodeResourceCapacity],
+    normalization: ObjectiveNormalization,
+    weights: ObjectiveWeights = ObjectiveWeights(),
+    *, energy_coefficient: float = DEFAULT_CPU_ENERGY_COEFFICIENT,
+) -> Equation17Evaluation:
+    """Evaluate every task term appearing in equation (17)."""
+
+    from dm_jcr.relay_resource_allocation import RelayTaskContext, evaluate_relay_resource_strategy
+
+    dctx, rctx, vctx = tuple(direct_contexts), tuple(relay_computation_contexts), tuple(v2v_relay_contexts)
+    if any(not isinstance(x, RelayTaskContext) for x in rctx):
+        raise TypeError("relay_computation_contexts must contain RelayTaskContext")
+    context_ids = [x.task_id for x in dctx] + [x.task_id for x in rctx] + [x.task_id for x in vctx]
+    if not context_ids:
+        raise ValueError("at least one task context is required")
+    if len(context_ids) != len(set(context_ids)):
+        raise ValueError("task_id values must be unique across all context types")
+    capacities = tuple(capacities)
+
+    direct_results = ()
+    if dctx:
+        direct_results = evaluate_direct_resource_strategy(
+            dctx, strategy.direct_allocations, capacities, normalization, weights,
+            energy_coefficient=energy_coefficient,
+        ).tasks
+    elif strategy.direct_allocations:
+        raise ValueError("direct allocations supplied without contexts")
+
+    relay_results = ()
+    if rctx:
+        relay_results = evaluate_relay_resource_strategy(
+            rctx, strategy.relay_computation_allocations, capacities, normalization, weights,
+            energy_coefficient=energy_coefficient,
+        ).tasks
+    elif strategy.relay_computation_allocations:
+        raise ValueError("relay computation allocations supplied without contexts")
+
+    vmap = {x.task_id: x for x in strategy.v2v_relay_allocations}
+    if len(vmap) != len(strategy.v2v_relay_allocations) or set(vmap) != {x.task_id for x in vctx}:
+        if vctx or strategy.v2v_relay_allocations:
+            raise ValueError("V2V contexts and allocations must contain the same tasks")
+    v2v_results = []
+    for context in vctx:
+        allocation = vmap[context.task_id]
+        metrics = evaluate_v2v_relay_task(context, allocation, energy_coefficient=energy_coefficient)
+        r_vu = achievable_rate_bps(
+            allocation.vehicle_to_uav_bandwidth_hz, context.source_vehicle_transmit_power_w,
+            context.vehicle_to_uav_channel_gain, context.noise_psd_w_hz,
+            context.vehicle_to_uav_interference_power_w,
+        )
+        r_uv = achievable_rate_bps(
+            allocation.uav_to_vehicle_bandwidth_hz, allocation.relay_transmit_power_w,
+            context.uav_to_vehicle_channel_gain, context.noise_psd_w_hz,
+            context.uav_to_vehicle_interference_power_w,
+        )
+        lat_ref = normalization.latency_reference_s or context.max_latency_s
+        v2v_results.append(V2VRelayTaskEvaluation(
+            task_id=context.task_id, relay_uav_id=context.relay_uav_id, allocation=allocation,
+            vehicle_to_uav_rate_bps=float(r_vu), uav_to_vehicle_rate_bps=float(r_uv), metrics=metrics,
+            normalized_latency=float(metrics.total_latency_s / lat_ref),
+            normalized_energy=float(metrics.total_energy_j / normalization.energy_reference_j),
+        ))
+
+    latencies = [x.normalized_latency for x in direct_results]
+    latencies += [x.normalized_latency for x in relay_results]
+    latencies += [x.normalized_latency for x in v2v_results]
+    energies = [x.normalized_energy for x in direct_results]
+    energies += [x.normalized_energy for x in relay_results]
+    energies += [x.normalized_energy for x in v2v_results]
+    mean_t, mean_e = float(np.mean(latencies)), float(np.mean(energies))
+    return Equation17Evaluation(
+        direct_tasks=tuple(direct_results),
+        relay_computation_tasks=tuple(relay_results),
+        v2v_relay_tasks=tuple(v2v_results),
+        mean_normalized_latency=mean_t,
+        mean_normalized_energy=mean_e,
+        weighted_objective=float(weights.latency * mean_t + weights.energy * mean_e),
+        resource_constraints_satisfied=verify_equation17_resource_constraints(strategy, capacities),
+        deadline_constraints_satisfied=(
+            all(x.metrics.meets_deadline for x in direct_results)
+            and all(x.metrics.deadline_satisfied for x in relay_results)
+            and all(x.metrics.deadline_satisfied for x in v2v_results)
+        ),
+    )
+
+
+__all__ += [
+    "Equation17Evaluation", "Equation17ProjectedStrategy",
+    "FeasibleV2VRelayAllocation", "RawV2VRelayAllocation",
+    "V2VRelayTaskContext", "V2VRelayTaskEvaluation", "V2VRelayTaskMetrics",
+    "equation17_resource_totals", "evaluate_equation17_strategy",
+    "evaluate_v2v_relay_task", "project_equation17_strategy",
+    "verify_equation17_resource_constraints",
 ]

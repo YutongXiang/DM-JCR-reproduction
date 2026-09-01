@@ -1,3 +1,5 @@
+# DM-JCR 复现项目的 Python 构建、依赖与测试配置。
+
 [build-system]
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
@@ -5,7 +7,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "dm-jcr-reproduction"
 version = "0.1.0"
-description = "Reproduction of the DM-JCR resource allocation method"
+description = "DM-JCR 通信与计算资源联合分配方法复现"
 requires-python = ">=3.11"
 dependencies = [
     "numpy",

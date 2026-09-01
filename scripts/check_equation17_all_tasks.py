@@ -1,52 +1,77 @@
-"""End-to-end check for every task type in equation (17)."""
-from dm_jcr.relay_resource_allocation import RelayTaskContext, RawRelayTaskAllocation
+"""使用统一配置端到端检查论文公式（17）中的全部任务类型。"""
+
+from collections.abc import Sequence
+
 from dm_jcr.resource_allocation import (
-    DirectTaskContext, NodeResourceCapacity, ObjectiveNormalization,
-    RawTaskAllocation, RawV2VRelayAllocation, V2VRelayTaskContext,
-    equation17_resource_totals, evaluate_equation17_strategy,
+    equation17_resource_totals,
+    evaluate_equation17_strategy,
     project_equation17_strategy,
 )
-from dm_jcr.task_model import ComputationTask
+from scripts._config_helpers import (
+    capacities,
+    direct_context,
+    load_script_config,
+    objective_settings,
+    raw_direct,
+    raw_relay,
+    raw_v2v,
+    relay_context,
+    v2v_context,
+)
 
 
-def task(bits, cycles, deadline, ratio=0.1):
-    return ComputationTask(bits, cycles, deadline, ratio)
-
-
-def main() -> None:
-    capacities = (
-        NodeResourceCapacity("uav-1", 120e6, 2e9, 30.0),
-        NodeResourceCapacity("rsu-1", 100e6, 3e9, 50.0),
+def main(argv: Sequence[str] | None = None) -> None:
+    config, experiment = load_script_config(
+        "equation17",
+        __doc__ or "Equation-17 check",
+        argv,
     )
+    capacity_items = capacities(experiment["capacities"])
+    direct_records = experiment["direct_tasks"]
+    relay_records = experiment["relay_tasks"]
+    v2v_records = experiment["v2v_tasks"]
+    normalization, weights, energy_coefficient = objective_settings(config)
+
     strategy = project_equation17_strategy(
-        (RawTaskAllocation("direct", "rsu-1", 1, 2, 1),),
-        (RawRelayTaskAllocation("relay-compute", "uav-1", "rsu-1", 1, 2, 2, 1, 1, 1, 1, 2),),
-        (RawV2VRelayAllocation("v2v-relay", "uav-1", 1, 1, 1, 1),),
-        capacities,
+        tuple(raw_direct(item) for item in direct_records),
+        tuple(raw_relay(item) for item in relay_records),
+        tuple(raw_v2v(item) for item in v2v_records),
+        capacity_items,
     )
     result = evaluate_equation17_strategy(
-        (DirectTaskContext("direct", "rsu-1", task(8e5, 2e8, 1.0), 2e-9, 3e-9, 0.2, 4e-21),),
-        (RelayTaskContext(
-            "relay-compute", "uav-1", "rsu-1", task(8e5, 2e8, 2.0),
-            3e-9, 4e-9, 4e-9, 3e-9, 0.2, 4e-21, 0.1,
-        ),),
-        (V2VRelayTaskContext(
-            "v2v-relay", "vehicle-1", "vehicle-2", "uav-1",
-            4e5, 1.0, 3e-9, 3e-9, 0.2, 4e-21, 0.1,
-        ),),
-        strategy, capacities, ObjectiveNormalization(energy_reference_j=10.0),
+        tuple(direct_context(item) for item in direct_records),
+        tuple(relay_context(item) for item in relay_records),
+        tuple(v2v_context(item) for item in v2v_records),
+        strategy,
+        capacity_items,
+        normalization,
+        weights,
+        energy_coefficient=energy_coefficient,
     )
 
     print("=== Per-node totals ===")
-    for node, (b, f, p) in equation17_resource_totals(strategy).items():
-        print(f"{node}: bandwidth={b/1e6:.2f} MHz cpu={f/1e9:.2f} GHz power={p:.2f} W")
+    for node, (bandwidth, cpu, power) in equation17_resource_totals(strategy).items():
+        print(
+            f"{node}: bandwidth={bandwidth / 1e6:.2f} MHz "
+            f"cpu={cpu / 1e9:.2f} GHz power={power:.2f} W"
+        )
     print("\n=== Task types ===")
-    for x in result.direct_tasks:
-        print(f"direct {x.task_id}: latency={x.metrics.total_latency_s:.6f}s energy={x.metrics.total_energy_j:.6f}J")
-    for x in result.relay_computation_tasks:
-        print(f"relay-compute {x.task_id}: latency={x.metrics.total_latency_s:.6f}s energy={x.metrics.total_energy_j:.6f}J")
-    for x in result.v2v_relay_tasks:
-        print(f"v2v-relay {x.task_id}: latency={x.metrics.total_latency_s:.6f}s energy={x.metrics.total_energy_j:.6f}J")
+    for item in result.direct_tasks:
+        print(
+            f"direct {item.task_id}: latency={item.metrics.total_latency_s:.6f}s "
+            f"energy={item.metrics.total_energy_j:.6f}J"
+        )
+    for item in result.relay_computation_tasks:
+        print(
+            f"relay-compute {item.task_id}: "
+            f"latency={item.metrics.total_latency_s:.6f}s "
+            f"energy={item.metrics.total_energy_j:.6f}J"
+        )
+    for item in result.v2v_relay_tasks:
+        print(
+            f"v2v-relay {item.task_id}: latency={item.metrics.total_latency_s:.6f}s "
+            f"energy={item.metrics.total_energy_j:.6f}J"
+        )
     print(f"\nmean_normalized_latency={result.mean_normalized_latency:.6f}")
     print(f"mean_normalized_energy={result.mean_normalized_energy:.6f}")
     print(f"J={result.weighted_objective:.6f}")

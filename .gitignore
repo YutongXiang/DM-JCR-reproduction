@@ -1,12 +1,14 @@
+# DM-JCR 复现项目无需纳入版本控制的文件。
+
 # =====================
-# Python virtual env
+# Python 虚拟环境
 # =====================
 .venv/
 venv/
 env/
 
 # =====================
-# Python cache
+# Python 缓存
 # =====================
 __pycache__/
 *.py[cod]
@@ -18,7 +20,7 @@ __pycache__/
 .pytest_cache/
 
 # =====================
-# Package build
+# 软件包构建产物
 # =====================
 *.egg-info/
 dist/
@@ -30,14 +32,14 @@ build/
 .vscode/
 
 # =====================
-# Simulation outputs
+# 仿真输出
 # =====================
 outputs/
 *.csv
 *.log
 
 # =====================
-# OS files
+# 操作系统文件
 # =====================
 .DS_Store
 Thumbs.db

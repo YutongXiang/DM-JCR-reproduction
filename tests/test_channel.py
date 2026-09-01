@@ -1,3 +1,5 @@
+"""信道增益、信干噪比及可达速率模型的单元测试。"""
+
 import numpy as np
 import pytest
 

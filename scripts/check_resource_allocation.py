@@ -1,54 +1,39 @@
-"""Small end-to-end check for equations (17) and (27)."""
+"""使用统一配置对论文公式（17）和（27）进行小型端到端检查。"""
+
+from collections.abc import Sequence
 
 from dm_jcr.resource_allocation import (
-    DirectTaskContext,
-    NodeResourceCapacity,
-    ObjectiveNormalization,
-    RawTaskAllocation,
     evaluate_direct_resource_strategy,
     project_resource_strategy,
 )
-from dm_jcr.task_model import ComputationTask
+from scripts._config_helpers import (
+    capacities,
+    direct_context,
+    load_script_config,
+    objective_settings,
+    raw_direct,
+)
 
 
-def main() -> None:
-    capacity = NodeResourceCapacity(
-        node_id="rsu-1",
-        total_bandwidth_hz=100.0e6,
-        total_cpu_frequency_hz=3.0e9,
-        total_transmit_power_w=50.0,
+def main(argv: Sequence[str] | None = None) -> None:
+    config, experiment = load_script_config(
+        "direct_resource",
+        __doc__ or "Direct resource-allocation check",
+        argv,
     )
-    contexts = [
-        DirectTaskContext(
-            task_id="vehicle-1/task-1",
-            node_id="rsu-1",
-            task=ComputationTask(8.0e5, 2.0e8, 0.5, 0.1),
-            uplink_channel_gain=2.0e-9,
-            downlink_channel_gain=3.0e-9,
-            vehicle_transmit_power_w=0.2,
-            noise_psd_w_hz=4.0e-21,
-        ),
-        DirectTaskContext(
-            task_id="vehicle-2/task-1",
-            node_id="rsu-1",
-            task=ComputationTask(1.6e6, 4.0e8, 0.8, 0.2),
-            uplink_channel_gain=1.0e-9,
-            downlink_channel_gain=2.0e-9,
-            vehicle_transmit_power_w=0.2,
-            noise_psd_w_hz=4.0e-21,
-        ),
-    ]
-    raw = [
-        RawTaskAllocation("vehicle-1/task-1", "rsu-1", 1.0, 2.0, 1.0),
-        RawTaskAllocation("vehicle-2/task-1", "rsu-1", 3.0, 1.0, 2.0),
-    ]
+    capacity_items = capacities(experiment["capacities"])
+    contexts = tuple(direct_context(item) for item in experiment["tasks"])
+    raw = tuple(raw_direct(item) for item in experiment["tasks"])
+    normalization, weights, energy_coefficient = objective_settings(config)
 
-    allocation = project_resource_strategy(raw, [capacity])
+    allocation = project_resource_strategy(raw, capacity_items)
     evaluation = evaluate_direct_resource_strategy(
         contexts,
         allocation,
-        [capacity],
-        ObjectiveNormalization(energy_reference_j=10.0),
+        capacity_items,
+        normalization,
+        weights,
+        energy_coefficient=energy_coefficient,
     )
 
     for item in evaluation.tasks:

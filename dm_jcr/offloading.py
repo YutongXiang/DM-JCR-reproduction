@@ -1,9 +1,7 @@
-"""Rule-based task-to-node mapping from equations (9)-(11).
+"""实现论文公式（9）至（11）的规则式任务—节点映射。
 
-The paper first evaluates every candidate UAV/RSU with a utility function,
-then maps a task to the node with the largest utility.  This mapping is an
-input to the later resource-allocation problem; it is not itself generated
-by the diffusion model.
+论文先用效用函数评价每个候选无人机或路侧单元，再把任务映射到效用最大的
+节点。该映射是后续资源分配问题的输入，并非由扩散模型生成。
 """
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
-"""Tests for the direct-link task model.
+"""直接链路任务模型的单元测试。
 
-Run this file from the project root with:
+在项目根目录使用以下命令运行本文件：
 
     python -m pytest tests/test_task_model.py -q
 """

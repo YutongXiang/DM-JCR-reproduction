@@ -1,4 +1,4 @@
-"""Tests for equations (4) and (5) in dm_jcr.mobility."""
+"""移动模型中论文公式（4）和（5）的单元测试。"""
 
 import numpy as np
 import pytest

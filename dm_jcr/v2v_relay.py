@@ -1,9 +1,8 @@
-"""UAV-assisted vehicle-to-vehicle forwarding, equations (14) and (15).
+"""实现论文公式（14）和（15）的无人机辅助车车转发模型。
 
-Unlike equations (12) and (13), this model describes a V2V communication
-task. The UAV receives data from the source vehicle, performs forwarding
-processing such as decoding/error correction, and transmits the same data to
-the destination vehicle. No edge-node task computation is involved.
+与公式（12）和（13）不同，本模型描述车车通信任务：无人机接收源车辆数据，
+执行解码、纠错等转发处理，再将同一数据发送给目标车辆，不涉及边缘节点上的
+任务计算。
 """
 
 from __future__ import annotations

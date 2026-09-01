@@ -1,15 +1,12 @@
-"""
-公式(4) 和 (5) 的移动模型实现。
-Mobility models used by the DM-JCR system simulator.
+"""DM-JCR 系统仿真器使用的移动模型，对应论文公式（4）和（5）。
 
-This module implements the position evolution equations from the paper:
+本模块实现以下位置演化公式：
 
     l_v^(t+1) = l_v^t + sp_v^t * delta_t + omega_v^t    (4)
     l_u^(t+1) = l_u^t + sp_u^t * delta_t + omega_u^t    (5)
 
-Vehicles are constrained to the ground plane (z = 0), while UAVs move in
-three-dimensional space.  All positions are measured in metres, velocities
-in metres per second, and time-slot lengths in seconds.
+车辆被约束在地面平面（z = 0），无人机可在三维空间中移动。位置单位为米，
+速度单位为米每秒，时隙长度单位为秒。
 """
 
 from __future__ import annotations
@@ -280,4 +277,3 @@ __all__ = [
     "update_uav_position",
     "update_vehicle_position",
 ]
-

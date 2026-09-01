@@ -1,4 +1,4 @@
-"""Tests for UAV-assisted V2V equations (14) and (15)."""
+"""无人机辅助车车通信公式（14）和（15）的单元测试。"""
 
 import pytest
 

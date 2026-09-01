@@ -1,4 +1,4 @@
-"""Tests for mixed direct/relay equation-(17) resource allocation."""
+"""论文公式（17）中直连与中继混合资源分配的单元测试。"""
 
 import pytest
 

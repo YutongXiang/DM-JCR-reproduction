@@ -1,3 +1,5 @@
+"""随机遮挡、Rayleigh/Rician 衰落及无线链路采样的单元测试。"""
+
 import numpy as np
 import pytest
 

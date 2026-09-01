@@ -1,4 +1,4 @@
-"""Tests for equations (9)-(11) and the hysteresis rule."""
+"""论文公式（9）至（11）及迟滞规则的单元测试。"""
 
 from math import exp
 

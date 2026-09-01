@@ -1,4 +1,4 @@
-"""Tests for equations (17) and (27)."""
+"""论文公式（17）和（27）资源分配逻辑的单元测试。"""
 
 import numpy as np
 import pytest

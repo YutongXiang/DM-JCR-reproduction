@@ -1,0 +1,311 @@
+# DM-JCR 复现项目统一配置
+#
+# [paper.*] 下的数值由论文明确给出；[assumptions.*] 和 [experiments.*]
+# 下的数值是论文未给出确定值或实现细节时采用的复现方案。
+
+[metadata]
+schema_version = 1
+paper_doi = "10.1109/TVT.2026.3656593"
+
+[paper.system]
+# 表 I 给出的场景规模上限。
+max_vehicles = 100
+max_uavs = 15
+max_rsus = 20
+
+[paper.channel]
+wavelength_m = 0.1
+blockage_probability = 0.3
+
+[paper.task]
+cpu_energy_coefficient = 5.0e-28
+output_ratio_range = [0.01, 0.5]
+forwarding_cycles_per_bit_range = [0.01, 0.2]
+
+[paper.objective]
+latency_weight = 0.5
+energy_weight = 0.5
+
+[paper.offloading]
+link_quality_weight = 0.3
+cpu_load_weight = 0.2
+bandwidth_load_weight = 0.15
+power_load_weight = 0.15
+latency_risk_weight = 0.2
+hysteresis_threshold = 0.1
+
+[assumptions.units]
+# The paper uses KB without defining whether it is decimal or binary.
+bytes_per_kilobyte = 1000
+
+[assumptions.mobility]
+# Equations (4)-(5) contain mobility noise but give no distribution.
+noise_distribution = "zero_mean_independent_gaussian"
+boundary_policy = "clip"
+
+[assumptions.channel]
+# The paper specifies Rayleigh/Rician fading but not these distribution details.
+thermal_noise_density_dbm_hz = -174.0
+receiver_noise_figure_db = 0.0
+rician_k_factor_db = 6.0
+los_additional_loss_db = [0.0, 3.0]
+blocked_additional_loss_db = [10.0, 30.0]
+default_interference_power_w = 0.0
+default_link_available = true
+
+[assumptions.objective]
+# The paper says latency and energy are normalized but omits the formula.
+latency_normalization = "per_task_deadline"
+energy_reference_j = 10.0
+
+[assumptions.relay_accounting]
+# The paper does not state how four hops share one node bandwidth budget.
+bandwidth_policy = "charge_v2u_u2n_u2v_to_relay_and_n2u_to_compute_node"
+relay_power_policy = "reuse_one_relay_power_for_both_outbound_hops"
+
+[assumptions.tensor]
+# 论文没有规定扩散模型输入/输出张量的补零上限和归一化方式。
+# 节点上限来自表 I；其余数值是本复现采用的固定编码约定。
+max_tasks = 150
+position_scale_m = 1000.0
+speed_scale_mps = 20.0
+bandwidth_scale_hz = 4.0e8
+cpu_scale_hz = 3.0e9
+power_scale_w = 70.0
+task_bits_scale = 4.0e6
+task_cycles_scale = 1.0e10
+latency_scale_s = 1.0
+channel_gain_scale = 1.0e-7
+
+[assumptions.dataset_generation]
+# 论文没有公开训练数据生成程序，以下范围用于构造可重复的多场景样本。
+vehicle_count_range = [4, 8]
+uav_count_range = [2, 3]
+rsu_count_range = [1, 2]
+task_count_range = [3, 6]
+area_size_m = [1000.0, 1000.0]
+uav_altitude_range_m = [50.0, 150.0]
+vehicle_speed_range_mps = [5.0, 20.0]
+uav_speed_range_mps = [0.0, 10.0]
+remaining_resource_fraction_range = [0.6, 1.0]
+uav_bandwidth_range_hz = [8.0e7, 1.5e8]
+rsu_bandwidth_range_hz = [1.0e8, 4.0e8]
+uav_cpu_range_hz = [1.0e9, 2.0e9]
+rsu_cpu_range_hz = [2.0e9, 3.0e9]
+uav_power_range_w = [20.0, 40.0]
+rsu_power_range_w = [40.0, 70.0]
+task_input_bits_range = [4.0e5, 2.0e6]
+task_cpu_cycles_range = [1.0e8, 2.0e9]
+task_latency_range_s = [1.0, 5.0]
+task_mode_probabilities = [0.4, 0.35, 0.25]
+ensure_all_task_modes = true
+vehicle_transmit_power_w = 0.2
+forwarding_cycles_per_bit = 0.1
+nominal_bandwidth_hz = 1.0e7
+vehicle_antenna_gain_db = 5.0
+uav_antenna_gain_db = 10.0
+rsu_antenna_gain_db = 10.0
+
+[assumptions.strategy_search]
+# 标签是候选搜索得到的高质量可行策略，不宣称是全局最优解。
+candidate_count = 64
+log_score_std = 1.0
+minimum_score = 0.05
+maximum_score = 20.0
+deadline_violation_penalty = 2.0
+require_feasible_label = true
+maximum_scenario_attempts = 20
+
+[experiments.dataset_generation]
+random_seed = 2026
+train_samples = 64
+validation_samples = 16
+test_samples = 16
+output_directory = "outputs/diffusion_dataset"
+
+[experiments.dynamic_channel]
+number_of_slots = 100
+time_step_s = 1.0
+random_seed = 2026
+vehicle_mobility_noise_std_m = 0.15
+uav_mobility_noise_std_m = 0.05
+# These are demonstration choices. In particular, vehicle_gain_db=3 is below
+# the paper's stated 5-10 dBi vehicle range and must not be treated as a paper value.
+vehicle_gain_db = 3.0
+uav_gain_db = 3.0
+bandwidth_hz = 1.0e7
+transmit_power_w = 0.2
+smoothing_window = 9
+output_csv = "outputs/dynamic_channel.csv"
+output_figure = "outputs/dynamic_channel_trend.png"
+
+[experiments.dynamic_channel.initial_vehicle]
+position_m = [0.0, 0.0, 0.0]
+velocity_mps = [12.0, 0.5, 0.0]
+
+[experiments.dynamic_channel.initial_uav]
+position_m = [600.0, 100.0, 100.0]
+velocity_mps = [-0.5, 0.2, 0.0]
+
+[experiments.dynamic_channel.vehicle_bounds]
+minimum_m = [0.0, -200.0, 0.0]
+maximum_m = [1200.0, 400.0, 0.0]
+
+[experiments.dynamic_channel.uav_bounds]
+minimum_m = [0.0, -200.0, 50.0]
+maximum_m = [1200.0, 400.0, 150.0]
+
+[[experiments.direct_resource.capacities]]
+node_id = "rsu-1"
+total_bandwidth_hz = 1.0e8
+total_cpu_frequency_hz = 3.0e9
+total_transmit_power_w = 50.0
+
+[[experiments.direct_resource.tasks]]
+task_id = "vehicle-1/task-1"
+node_id = "rsu-1"
+input_bits = 8.0e5
+cpu_cycles = 2.0e8
+max_latency_s = 0.5
+output_ratio = 0.1
+uplink_channel_gain = 2.0e-9
+downlink_channel_gain = 3.0e-9
+vehicle_transmit_power_w = 0.2
+noise_psd_w_hz = 4.0e-21
+bandwidth_score = 1.0
+cpu_score = 2.0
+power_score = 1.0
+
+[[experiments.direct_resource.tasks]]
+task_id = "vehicle-2/task-1"
+node_id = "rsu-1"
+input_bits = 1.6e6
+cpu_cycles = 4.0e8
+max_latency_s = 0.8
+output_ratio = 0.2
+uplink_channel_gain = 1.0e-9
+downlink_channel_gain = 2.0e-9
+vehicle_transmit_power_w = 0.2
+noise_psd_w_hz = 4.0e-21
+bandwidth_score = 3.0
+cpu_score = 1.0
+power_score = 2.0
+
+[[experiments.relay_resource.capacities]]
+node_id = "uav-1"
+total_bandwidth_hz = 1.2e8
+total_cpu_frequency_hz = 1.5e9
+total_transmit_power_w = 30.0
+
+[[experiments.relay_resource.capacities]]
+node_id = "rsu-1"
+total_bandwidth_hz = 1.0e8
+total_cpu_frequency_hz = 3.0e9
+total_transmit_power_w = 50.0
+
+[[experiments.relay_resource.direct_tasks]]
+task_id = "vehicle-1/direct-task"
+node_id = "rsu-1"
+input_bits = 6.0e5
+cpu_cycles = 1.5e8
+max_latency_s = 0.8
+output_ratio = 0.1
+uplink_channel_gain = 2.0e-9
+downlink_channel_gain = 3.0e-9
+vehicle_transmit_power_w = 0.2
+noise_psd_w_hz = 4.0e-21
+bandwidth_score = 1.0
+cpu_score = 2.0
+power_score = 1.0
+
+[[experiments.relay_resource.relay_tasks]]
+task_id = "vehicle-2/relay-task"
+relay_uav_id = "uav-1"
+compute_node_id = "rsu-1"
+input_bits = 8.0e5
+cpu_cycles = 2.0e8
+max_latency_s = 1.0
+output_ratio = 0.1
+vehicle_to_uav_channel_gain = 3.0e-9
+uav_to_node_channel_gain = 6.0e-9
+node_to_uav_channel_gain = 5.0e-9
+uav_to_vehicle_channel_gain = 4.0e-9
+vehicle_transmit_power_w = 0.2
+noise_psd_w_hz = 4.0e-21
+forwarding_cycles_per_bit = 0.1
+vehicle_to_uav_bandwidth_score = 1.0
+uav_to_node_bandwidth_score = 2.0
+node_to_uav_bandwidth_score = 2.0
+uav_to_vehicle_bandwidth_score = 1.0
+relay_cpu_score = 1.0
+compute_cpu_score = 1.0
+relay_power_score = 1.0
+compute_node_power_score = 2.0
+
+[[experiments.equation17.capacities]]
+node_id = "uav-1"
+total_bandwidth_hz = 1.2e8
+total_cpu_frequency_hz = 2.0e9
+total_transmit_power_w = 30.0
+
+[[experiments.equation17.capacities]]
+node_id = "rsu-1"
+total_bandwidth_hz = 1.0e8
+total_cpu_frequency_hz = 3.0e9
+total_transmit_power_w = 50.0
+
+[[experiments.equation17.direct_tasks]]
+task_id = "direct"
+node_id = "rsu-1"
+input_bits = 8.0e5
+cpu_cycles = 2.0e8
+max_latency_s = 1.0
+output_ratio = 0.1
+uplink_channel_gain = 2.0e-9
+downlink_channel_gain = 3.0e-9
+vehicle_transmit_power_w = 0.2
+noise_psd_w_hz = 4.0e-21
+bandwidth_score = 1.0
+cpu_score = 2.0
+power_score = 1.0
+
+[[experiments.equation17.relay_tasks]]
+task_id = "relay-compute"
+relay_uav_id = "uav-1"
+compute_node_id = "rsu-1"
+input_bits = 8.0e5
+cpu_cycles = 2.0e8
+max_latency_s = 2.0
+output_ratio = 0.1
+vehicle_to_uav_channel_gain = 3.0e-9
+uav_to_node_channel_gain = 4.0e-9
+node_to_uav_channel_gain = 4.0e-9
+uav_to_vehicle_channel_gain = 3.0e-9
+vehicle_transmit_power_w = 0.2
+noise_psd_w_hz = 4.0e-21
+forwarding_cycles_per_bit = 0.1
+vehicle_to_uav_bandwidth_score = 1.0
+uav_to_node_bandwidth_score = 2.0
+node_to_uav_bandwidth_score = 2.0
+uav_to_vehicle_bandwidth_score = 1.0
+relay_cpu_score = 1.0
+compute_cpu_score = 1.0
+relay_power_score = 1.0
+compute_node_power_score = 2.0
+
+[[experiments.equation17.v2v_tasks]]
+task_id = "v2v-relay"
+source_vehicle_id = "vehicle-1"
+target_vehicle_id = "vehicle-2"
+relay_uav_id = "uav-1"
+data_bits = 4.0e5
+max_latency_s = 1.0
+vehicle_to_uav_channel_gain = 3.0e-9
+uav_to_vehicle_channel_gain = 3.0e-9
+source_vehicle_transmit_power_w = 0.2
+noise_psd_w_hz = 4.0e-21
+forwarding_cycles_per_bit = 0.1
+vehicle_to_uav_bandwidth_score = 1.0
+uav_to_vehicle_bandwidth_score = 1.0
+relay_cpu_score = 1.0
+relay_power_score = 1.0

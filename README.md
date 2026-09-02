@@ -28,6 +28,8 @@ python -m scripts.check_resource_allocation
 python -m scripts.check_relay_resource_allocation
 python -m scripts.check_equation17_all_tasks
 python -m scripts.generate_diffusion_dataset
+python -m scripts.train_dm_jcr
+python -m scripts.sample_dm_jcr
 ```
 
 也可以为任一脚本指定另一份兼容配置：
@@ -55,3 +57,25 @@ python -m scripts.generate_diffusion_dataset --train-samples 8 --validation-samp
 ```
 
 每个划分保存为压缩 NPZ，既包含扁平条件 `E` 和标签 `x0`，也保留 `node_features`、`channel_gains`、`blockage`、`topology`、`task_features`、`task_node_indices`、两类掩码、目标值和可行性。`manifest.json` 记录尺寸、随机种子和各划分统计。三个划分使用同一主种子派生出的不同随机子流，保证可重复且互不复用样本。
+
+## DM-JCR 扩散模型
+
+扩散实现严格采用论文给出的主流程：K-Means 环境分类、两隐藏层 MLP 分类器、对称全连接升降维网络、`28×28` 单通道 U-Net、两次下采样和上采样、`64→128→256` 特征通道、1000 个扩散步、公式（19）的确定性反向采样，以及公式（24）的 `δJ²` 自定义损失。扩散训练不使用数据集中的 `x0` 专家标签；`x0` 仅用于质量对照，因为论文明确说明其方法不依赖专家数据集。
+
+论文未公开的 beta 调度、K-Means 类别数、隐藏层尺寸、Dropout、学习率、训练轮数、类别 prompt 注入和非负输出变换均集中在 `assumptions.diffusion`，没有混入 `paper.diffusion`。
+
+完整训练默认执行论文的 1000 步反向过程，计算量较大：
+
+```powershell
+python -m scripts.train_dm_jcr --device auto
+python -m scripts.check_dm_jcr_inference --device auto
+```
+
+只验证训练闭环时可以显式减少样本、轮数和扩散步数；这种模式不用于报告论文结果：
+
+```powershell
+python -m scripts.train_dm_jcr --device cpu --limit-samples 8 `
+  --classifier-epochs 1 --autoencoder-epochs 1 --diffusion-epochs 1 `
+  --batch-size 8 --denoising-steps 1 `
+  --checkpoint outputs/checkpoints/dm_jcr_smoke.pt
+```

@@ -145,10 +145,10 @@ def test_deadline_constraint_is_reported_without_changing_objective() -> None:
 def test_projection_rejects_missing_node_capacity() -> None:
     raw = [RawTaskAllocation("task-1", "missing", 1.0, 1.0, 1.0)]
     unrelated_capacity = NodeResourceCapacity("other", 1.0, 1.0, 1.0)
-    with pytest.raises(ValueError, match="missing capacity"):
+    with pytest.raises(ValueError, match="缺少节点"):
         project_resource_strategy(raw, [unrelated_capacity])
 
 
 def test_objective_weights_must_sum_to_one() -> None:
-    with pytest.raises(ValueError, match="sum to 1"):
+    with pytest.raises(ValueError, match="之和必须为 1"):
         ObjectiveWeights(latency=0.7, energy=0.7)

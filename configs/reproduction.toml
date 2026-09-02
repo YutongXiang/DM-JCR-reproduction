@@ -26,6 +26,18 @@ forwarding_cycles_per_bit_range = [0.01, 0.2]
 latency_weight = 0.5
 energy_weight = 0.5
 
+[paper.diffusion]
+# 表 I、图 2及算法 1明确给出的扩散模型结构。
+denoising_steps = 1000
+image_size = 28
+image_channels = 1
+unet_feature_channels = [64, 128, 256]
+convolution_kernel_size = 3
+pooling_kernel_size = 2
+upsampling_kernel_size = 2
+deterministic_reverse_sampling = true
+optimizer = "adam"
+
 [paper.offloading]
 link_quality_weight = 0.3
 cpu_load_weight = 0.2
@@ -35,16 +47,16 @@ latency_risk_weight = 0.2
 hysteresis_threshold = 0.1
 
 [assumptions.units]
-# The paper uses KB without defining whether it is decimal or binary.
+# 论文使用 KB，但未说明采用十进制还是二进制定义。
 bytes_per_kilobyte = 1000
 
 [assumptions.mobility]
-# Equations (4)-(5) contain mobility noise but give no distribution.
+# 公式（4）至（5）包含移动噪声，但未给出其分布。
 noise_distribution = "zero_mean_independent_gaussian"
 boundary_policy = "clip"
 
 [assumptions.channel]
-# The paper specifies Rayleigh/Rician fading but not these distribution details.
+# 论文指定了 Rayleigh/Rician 衰落，但未给出以下分布细节。
 thermal_noise_density_dbm_hz = -174.0
 receiver_noise_figure_db = 0.0
 rician_k_factor_db = 6.0
@@ -54,12 +66,12 @@ default_interference_power_w = 0.0
 default_link_available = true
 
 [assumptions.objective]
-# The paper says latency and energy are normalized but omits the formula.
+# 论文说明时延和能耗需要归一化，但省略了具体公式。
 latency_normalization = "per_task_deadline"
 energy_reference_j = 10.0
 
 [assumptions.relay_accounting]
-# The paper does not state how four hops share one node bandwidth budget.
+# 论文未说明四跳链路如何共享同一节点的带宽预算。
 bandwidth_policy = "charge_v2u_u2n_u2v_to_relay_and_n2u_to_compute_node"
 relay_power_policy = "reuse_one_relay_power_for_both_outbound_hops"
 
@@ -116,6 +128,33 @@ deadline_violation_penalty = 2.0
 require_feasible_label = true
 maximum_scenario_attempts = 20
 
+[assumptions.diffusion]
+# 论文未公开以下训练细节；这些值是可修改且被明确标记的复现假设。
+beta_schedule = "linear"
+beta_start = 1.0e-4
+beta_end = 2.0e-2
+environment_categories = 8
+environment_preprocessing = "per_feature_standardization"
+kmeans_n_init = 10
+classifier_hidden_sizes = [256, 128]
+classifier_dropout = 0.2
+autoencoder_hidden_sizes = [256, 512]
+model_max_tasks = 6
+time_embedding_size = 128
+condition_injection = "time_and_class_embedding_added_per_unet_block"
+positive_output_transform = "softplus"
+loss_delta = 1.0
+random_strategy_range = [0.05, 1.0]
+classifier_learning_rate = 1.0e-3
+autoencoder_learning_rate = 1.0e-3
+diffusion_learning_rate = 1.0e-4
+classifier_epochs = 50
+autoencoder_epochs = 100
+diffusion_epochs = 50
+batch_size = 8
+gradient_clip_norm = 1.0
+gradient_checkpointing = true
+
 [experiments.dataset_generation]
 random_seed = 2026
 train_samples = 64
@@ -129,8 +168,8 @@ time_step_s = 1.0
 random_seed = 2026
 vehicle_mobility_noise_std_m = 0.15
 uav_mobility_noise_std_m = 0.05
-# These are demonstration choices. In particular, vehicle_gain_db=3 is below
-# the paper's stated 5-10 dBi vehicle range and must not be treated as a paper value.
+# 以下参数仅用于演示。尤其是 vehicle_gain_db=3，低于论文给出的 5—10 dBi
+# 车辆增益范围，因此不能视为论文指定值。
 vehicle_gain_db = 3.0
 uav_gain_db = 3.0
 bandwidth_hz = 1.0e7

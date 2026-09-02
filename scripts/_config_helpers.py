@@ -21,17 +21,50 @@ from dm_jcr.resource_allocation import (
 from dm_jcr.task_model import ComputationTask
 
 
+class ChineseArgumentParser(argparse.ArgumentParser):
+    """使用中文标题、帮助项和错误前缀的命令行解析器。"""
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        kwargs["add_help"] = False
+        super().__init__(*args, **kwargs)
+        self._positionals.title = "位置参数"
+        self._optionals.title = "选项"
+        self.add_argument(
+            "-h",
+            "--help",
+            action="help",
+            default=argparse.SUPPRESS,
+            help="显示帮助信息并退出",
+        )
+
+    def format_help(self) -> str:
+        """将 argparse 固定生成的英文区段标题替换为中文。"""
+
+        return super().format_help().replace("usage:", "用法：", 1)
+
+    def format_usage(self) -> str:
+        """返回采用中文前缀的用法说明。"""
+
+        return super().format_usage().replace("usage:", "用法：", 1)
+
+    def error(self, message: str) -> None:
+        """以中文错误前缀报告无效命令行参数。"""
+
+        self.print_usage()
+        self.exit(2, f"{self.prog}：参数错误：{message}\n")
+
+
 def load_script_config(
     experiment_name: str,
     description: str,
     argv: Sequence[str] | None = None,
 ) -> tuple[dict[str, Any], Mapping[str, Any]]:
-    parser = argparse.ArgumentParser(description=description)
+    parser = ChineseArgumentParser(description=description)
     parser.add_argument(
         "--config",
         type=Path,
         default=DEFAULT_CONFIG_PATH,
-        help="TOML configuration path",
+        help="TOML 配置文件路径",
     )
     args = parser.parse_args(argv)
     config = load_config(args.config)

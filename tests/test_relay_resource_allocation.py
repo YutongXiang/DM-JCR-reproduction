@@ -60,14 +60,14 @@ def test_joint_projection_shares_node_budgets_between_task_types() -> None:
     direct = strategy.direct_allocations[0]
     relay = strategy.relay_allocations[0]
 
-    # UAV bandwidth scores are 1:1:2 over a 120-unit pool.
+    # 无人机带宽分数按 1:1:2 分配 120 单位的资源池。
     assert relay.vehicle_to_uav_bandwidth_hz == pytest.approx(30.0)
     assert relay.uav_to_node_bandwidth_hz == pytest.approx(30.0)
     assert relay.uav_to_vehicle_bandwidth_hz == pytest.approx(60.0)
     assert relay.relay_cpu_frequency_hz == pytest.approx(60.0)
     assert relay.relay_transmit_power_w == pytest.approx(30.0)
 
-    # RSU direct and relay claims compete in the same pools.
+    # 路侧单元上的直连与中继请求竞争相同资源池。
     assert direct.bandwidth_hz == pytest.approx(25.0)
     assert relay.node_to_uav_bandwidth_hz == pytest.approx(75.0)
     assert direct.cpu_frequency_hz == pytest.approx(200.0)
@@ -267,18 +267,18 @@ def test_relay_deadline_violation_is_reported() -> None:
 
 def test_joint_projection_rejects_missing_compute_node_capacity() -> None:
     capacities = [NodeResourceCapacity("uav-1", 1.0, 1.0, 1.0)]
-    with pytest.raises(ValueError, match="missing capacity"):
+    with pytest.raises(ValueError, match="缺少节点"):
         project_joint_resource_strategy([], [_relay_raw()], capacities)
 
 
 def test_duplicate_task_ids_across_direct_and_relay_are_rejected() -> None:
     direct = [RawTaskAllocation("same", "rsu-1", 1.0, 1.0, 1.0)]
-    with pytest.raises(ValueError, match="unique across direct and relay"):
+    with pytest.raises(ValueError, match="必须唯一"):
         project_joint_resource_strategy(direct, [_relay_raw("same")], _capacities())
 
 
 def test_relay_and_compute_nodes_must_be_different() -> None:
-    with pytest.raises(ValueError, match="must be different"):
+    with pytest.raises(ValueError, match="必须不同"):
         RawRelayTaskAllocation(
             task_id="task",
             relay_uav_id="uav-1",

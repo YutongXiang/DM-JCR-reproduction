@@ -11,6 +11,8 @@ description = "DM-JCR 通信与计算资源联合分配方法复现"
 requires-python = ">=3.11"
 dependencies = [
     "numpy",
+    "scikit-learn",
+    "torch",
 ]
 
 [tool.setuptools.packages.find]

@@ -23,7 +23,7 @@ from scripts._config_helpers import (
 def main(argv: Sequence[str] | None = None) -> None:
     config, experiment = load_script_config(
         "equation17",
-        __doc__ or "Equation-17 check",
+        __doc__ or "公式（17）检查",
         argv,
     )
     capacity_items = capacities(experiment["capacities"])
@@ -49,33 +49,33 @@ def main(argv: Sequence[str] | None = None) -> None:
         energy_coefficient=energy_coefficient,
     )
 
-    print("=== Per-node totals ===")
+    print("=== 各节点资源总量 ===")
     for node, (bandwidth, cpu, power) in equation17_resource_totals(strategy).items():
         print(
-            f"{node}: bandwidth={bandwidth / 1e6:.2f} MHz "
-            f"cpu={cpu / 1e9:.2f} GHz power={power:.2f} W"
+            f"{node}：带宽={bandwidth / 1e6:.2f} MHz "
+            f"CPU={cpu / 1e9:.2f} GHz 功率={power:.2f} W"
         )
-    print("\n=== Task types ===")
+    print("\n=== 任务类型 ===")
     for item in result.direct_tasks:
         print(
-            f"direct {item.task_id}: latency={item.metrics.total_latency_s:.6f}s "
-            f"energy={item.metrics.total_energy_j:.6f}J"
+            f"直连 {item.task_id}：时延={item.metrics.total_latency_s:.6f}s "
+            f"能耗={item.metrics.total_energy_j:.6f}J"
         )
     for item in result.relay_computation_tasks:
         print(
-            f"relay-compute {item.task_id}: "
-            f"latency={item.metrics.total_latency_s:.6f}s "
-            f"energy={item.metrics.total_energy_j:.6f}J"
+            f"中继计算 {item.task_id}："
+            f"时延={item.metrics.total_latency_s:.6f}s "
+            f"能耗={item.metrics.total_energy_j:.6f}J"
         )
     for item in result.v2v_relay_tasks:
         print(
-            f"v2v-relay {item.task_id}: latency={item.metrics.total_latency_s:.6f}s "
-            f"energy={item.metrics.total_energy_j:.6f}J"
+            f"车车中继 {item.task_id}：时延={item.metrics.total_latency_s:.6f}s "
+            f"能耗={item.metrics.total_energy_j:.6f}J"
         )
-    print(f"\nmean_normalized_latency={result.mean_normalized_latency:.6f}")
-    print(f"mean_normalized_energy={result.mean_normalized_energy:.6f}")
+    print(f"\n平均归一化时延={result.mean_normalized_latency:.6f}")
+    print(f"平均归一化能耗={result.mean_normalized_energy:.6f}")
     print(f"J={result.weighted_objective:.6f}")
-    print(f"feasible={result.feasible}")
+    print(f"是否可行={result.feasible}")
 
 
 if __name__ == "__main__":

@@ -29,7 +29,7 @@ from scripts._config_helpers import (
 def main(argv: Sequence[str] | None = None) -> None:
     config, experiment = load_script_config(
         "relay_resource",
-        __doc__ or "Relay resource-allocation check",
+        __doc__ or "中继资源分配检查",
         argv,
     )
     capacity_items = capacities(experiment["capacities"])
@@ -58,59 +58,59 @@ def main(argv: Sequence[str] | None = None) -> None:
         energy_coefficient=energy_coefficient,
     )
 
-    print("=== Direct task ===")
+    print("=== 直连任务 ===")
     for item in evaluation.direct_tasks:
         print(
             item.task_id,
-            f"node={item.node_id}",
-            f"bandwidth={item.allocation.bandwidth_hz / 1e6:.2f} MHz",
-            f"cpu={item.allocation.cpu_frequency_hz / 1e9:.2f} GHz",
-            f"power={item.allocation.node_transmit_power_w:.2f} W",
-            f"latency={item.metrics.total_latency_s:.6f} s",
-            f"energy={item.metrics.total_energy_j:.6f} J",
+            f"节点={item.node_id}",
+            f"带宽={item.allocation.bandwidth_hz / 1e6:.2f} MHz",
+            f"CPU={item.allocation.cpu_frequency_hz / 1e9:.2f} GHz",
+            f"功率={item.allocation.node_transmit_power_w:.2f} W",
+            f"时延={item.metrics.total_latency_s:.6f} s",
+            f"能耗={item.metrics.total_energy_j:.6f} J",
         )
 
-    print("\n=== Relay task ===")
+    print("\n=== 中继任务 ===")
     for item in evaluation.relay_tasks:
         allocation = item.allocation
         print(
             item.task_id,
-            f"path={item.relay_uav_id}->{item.compute_node_id}",
+            f"路径={item.relay_uav_id}->{item.compute_node_id}",
         )
         print(
-            "  bandwidth:",
+            "  带宽：",
             f"V2U={allocation.vehicle_to_uav_bandwidth_hz / 1e6:.2f} MHz",
             f"U2N={allocation.uav_to_node_bandwidth_hz / 1e6:.2f} MHz",
             f"N2U={allocation.node_to_uav_bandwidth_hz / 1e6:.2f} MHz",
             f"U2V={allocation.uav_to_vehicle_bandwidth_hz / 1e6:.2f} MHz",
         )
         print(
-            "  compute/power:",
-            f"relay_cpu={allocation.relay_cpu_frequency_hz / 1e9:.2f} GHz",
-            f"node_cpu={allocation.compute_cpu_frequency_hz / 1e9:.2f} GHz",
-            f"relay_power={allocation.relay_transmit_power_w:.2f} W",
-            f"node_power={allocation.compute_node_transmit_power_w:.2f} W",
+            "  计算/功率：",
+            f"中继CPU={allocation.relay_cpu_frequency_hz / 1e9:.2f} GHz",
+            f"节点CPU={allocation.compute_cpu_frequency_hz / 1e9:.2f} GHz",
+            f"中继功率={allocation.relay_transmit_power_w:.2f} W",
+            f"节点功率={allocation.compute_node_transmit_power_w:.2f} W",
         )
         print(
-            "  result:",
-            f"latency={item.metrics.total_latency_s:.6f} s",
-            f"energy={item.metrics.total_energy_j:.6f} J",
+            "  结果：",
+            f"时延={item.metrics.total_latency_s:.6f} s",
+            f"能耗={item.metrics.total_energy_j:.6f} J",
         )
 
-    print("\n=== Per-node totals ===")
+    print("\n=== 各节点资源总量 ===")
     for node_id, (bandwidth, cpu, power) in joint_resource_totals(strategy).items():
         print(
             node_id,
-            f"bandwidth={bandwidth / 1e6:.2f} MHz",
-            f"cpu={cpu / 1e9:.2f} GHz",
-            f"power={power:.2f} W",
+            f"带宽={bandwidth / 1e6:.2f} MHz",
+            f"CPU={cpu / 1e9:.2f} GHz",
+            f"功率={power:.2f} W",
         )
 
-    print("\n=== Joint objective ===")
-    print(f"mean_normalized_latency={evaluation.mean_normalized_latency:.6f}")
-    print(f"mean_normalized_energy={evaluation.mean_normalized_energy:.6f}")
+    print("\n=== 联合目标 ===")
+    print(f"平均归一化时延={evaluation.mean_normalized_latency:.6f}")
+    print(f"平均归一化能耗={evaluation.mean_normalized_energy:.6f}")
     print(f"J={evaluation.weighted_objective:.6f}")
-    print(f"feasible={evaluation.feasible}")
+    print(f"是否可行={evaluation.feasible}")
 
 
 if __name__ == "__main__":

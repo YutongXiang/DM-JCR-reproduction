@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from math import isfinite
 
 
-# The value used in the paper's computation-energy model.
+# 论文计算能耗模型采用的系数。
 DEFAULT_CPU_ENERGY_COEFFICIENT = 5.0e-28
 
 
@@ -18,48 +18,42 @@ def _validate_finite(
     *,
     strictly_positive: bool,
 ) -> float:
-    """Convert a value to float and validate its range.
+    """将数值转换为浮点数并校验范围。
 
-    Parameters
-    ----------
     name:
-        Parameter name used in error messages.
+        错误信息中使用的参数名。
     value:
-        Numeric value to validate.
+        待校验数值。
     strictly_positive:
-        If True, require value > 0.
-        Otherwise, require value >= 0.
+        为真时要求 value > 0，否则要求 value >= 0。
 
-    Returns
-    -------
-    float
-        The validated floating-point value.
+    返回校验后的浮点数。
     """
     value = float(value)
 
     if not isfinite(value):
-        raise ValueError(f"{name} must be finite, got {value!r}")
+        raise ValueError(f"{name} 必须为有限数值，实际为 {value!r}")
 
     if strictly_positive:
         if value <= 0.0:
-            raise ValueError(f"{name} must be greater than 0, got {value!r}")
+            raise ValueError(f"{name} 必须大于 0，实际为 {value!r}")
     elif value < 0.0:
-        raise ValueError(f"{name} must be non-negative, got {value!r}")
+        raise ValueError(f"{name} 必须为非负数，实际为 {value!r}")
 
     return value
 
 
 def kilobytes_to_bits(size_kb: float) -> float:
-    """Convert decimal kilobytes to bits.
+    """将十进制千字节换算为比特。
 
-    This reproduction uses:
+    本复现采用：
 
         1 KB = 1000 Byte
         1 Byte = 8 bit
 
-    Therefore:
+    因此：
 
-        number of bits = size_kb * 1000 * 8
+        比特数 = size_kb * 1000 * 8
     """
     size_kb = _validate_finite(
         "size_kb",
@@ -71,18 +65,16 @@ def kilobytes_to_bits(size_kb: float) -> float:
 
 @dataclass(frozen=True)
 class ComputationTask:
-    """Description of one computation task.
+    """一个计算任务的描述。
 
-    Parameters
-    ----------
     input_bits:
-        Input task size D, in bits.
+        输入任务大小 D，单位为比特。
     cpu_cycles:
-        Total number of CPU cycles C required to execute the task.
+        执行任务所需的 CPU 总周期数 C。
     max_latency_s:
-        Maximum allowed latency T_max, in seconds.
+        最大允许时延 T_max，单位为秒。
     output_ratio:
-        Output/input data-size ratio mu. The output size is mu * D.
+        输出与输入的数据量比 mu，输出大小为 mu * D。
     """
 
     input_bits: float
@@ -130,26 +122,24 @@ class ComputationTask:
 
     @property
     def output_bits(self) -> float:
-        """Return the result-data size mu * D, in bits."""
+        """返回结果数据大小 mu * D，单位为比特。"""
         return self.output_ratio * self.input_bits
 
 
 @dataclass(frozen=True)
 class DirectLinkResources:
-    """Communication and computing resources for direct execution.
+    """任务直连执行所使用的通信与计算资源。
 
-    Parameters
-    ----------
     uplink_rate_bps:
-        Vehicle-to-node rate r_vn, in bit/s.
+        车辆到节点的速率 r_vn，单位为 bit/s。
     downlink_rate_bps:
-        Node-to-vehicle rate r_nv, in bit/s.
+        节点到车辆的速率 r_nv，单位为 bit/s。
     cpu_frequency_hz:
-        CPU frequency f_n allocated by the edge node, in cycle/s.
+        边缘节点分配的 CPU 频率 f_n，单位为 cycle/s。
     vehicle_tx_power_w:
-        Vehicle transmission power p_v, in watts.
+        车辆发射功率 p_v，单位为瓦。
     node_tx_power_w:
-        Edge-node transmission power p_n, in watts.
+        边缘节点发射功率 p_n，单位为瓦。
     """
 
     uplink_rate_bps: float
@@ -208,7 +198,7 @@ class DirectLinkResources:
 
 @dataclass(frozen=True)
 class DirectTaskEvaluation:
-    """Detailed result of evaluating one direct-link task."""
+    """一个直连任务的详细评价结果。"""
 
     upload_latency_s: float
     computation_latency_s: float
@@ -227,19 +217,14 @@ def transmission_time_s(
     data_bits: float,
     rate_bps: float,
 ) -> float:
-    """Calculate transmission time using T = D / r.
+    """按照 T = D / r 计算传输时间。
 
-    Parameters
-    ----------
     data_bits:
-        Data size D, in bits.
+        数据大小 D，单位为比特。
     rate_bps:
-        Transmission rate r, in bit/s.
+        传输速率 r，单位为 bit/s。
 
-    Returns
-    -------
-    float
-        Transmission time in seconds.
+    返回以秒为单位的传输时间。
     """
     data_bits = _validate_finite(
         "data_bits",
@@ -259,22 +244,16 @@ def computation_time_s(
     cpu_cycles: float,
     cpu_frequency_hz: float,
 ) -> float:
-    """Calculate computation time using T = C / f.
+    """按照 T = C / f 计算执行时间。
 
-    Although the parameter name contains ``hz``, the intended unit is
-    CPU cycles per second.
+    虽然参数名含有 ``hz``，实际单位是 CPU 每秒周期数。
 
-    Parameters
-    ----------
     cpu_cycles:
-        Required CPU cycles C.
+        所需 CPU 周期数 C。
     cpu_frequency_hz:
-        Allocated CPU frequency f, in cycle/s.
+        分配的 CPU 频率 f，单位为 cycle/s。
 
-    Returns
-    -------
-    float
-        Computation time in seconds.
+    返回以秒为单位的执行时间。
     """
     cpu_cycles = _validate_finite(
         "cpu_cycles",
@@ -295,21 +274,16 @@ def dynamic_cpu_energy_j(
     cpu_frequency_hz: float,
     energy_coefficient: float = DEFAULT_CPU_ENERGY_COEFFICIENT,
 ) -> float:
-    """Calculate dynamic CPU energy using E = zeta * f^2 * C.
+    """按照 E = zeta * f^2 * C 计算 CPU 动态能耗。
 
-    Parameters
-    ----------
     cpu_cycles:
-        Required CPU cycles C.
+        所需 CPU 周期数 C。
     cpu_frequency_hz:
-        CPU frequency f, in cycle/s.
+        CPU 频率 f，单位为 cycle/s。
     energy_coefficient:
-        Hardware-dependent coefficient zeta.
+        与硬件有关的系数 zeta。
 
-    Returns
-    -------
-    float
-        Dynamic CPU energy in joules.
+    返回以焦耳为单位的 CPU 动态能耗。
     """
     cpu_cycles = _validate_finite(
         "cpu_cycles",
@@ -338,19 +312,16 @@ def direct_task_latency_s(
     task: ComputationTask,
     resources: DirectLinkResources,
 ) -> float:
-    """Calculate direct-link total latency from equation (12).
+    """按照公式（12）计算直连任务的总时延。
 
-    The direct-link branch is:
+    直连分支为：
 
         T_direct
             = D / r_vn
             + C / f_n
             + mu * D / r_nv
 
-    Returns
-    -------
-    float
-        Total task latency in seconds.
+    返回以秒为单位的任务总时延。
     """
     upload_latency_s = transmission_time_s(
         task.input_bits,
@@ -379,19 +350,16 @@ def direct_task_energy_j(
     resources: DirectLinkResources,
     energy_coefficient: float = DEFAULT_CPU_ENERGY_COEFFICIENT,
 ) -> float:
-    """Calculate direct-link total energy from equation (13).
+    """按照公式（13）计算直连任务的总能耗。
 
-    The direct-link branch is:
+    直连分支为：
 
         E_direct
             = p_v * D / r_vn
             + zeta * f_n^2 * C
             + p_n * mu * D / r_nv
 
-    Returns
-    -------
-    float
-        Total energy consumption in joules.
+    返回以焦耳为单位的总能耗。
     """
     upload_latency_s = transmission_time_s(
         task.input_bits,
@@ -430,24 +398,18 @@ def evaluate_direct_task(
     energy_coefficient: float = DEFAULT_CPU_ENERGY_COEFFICIENT,
     deadline_tolerance_s: float = 1.0e-12,
 ) -> DirectTaskEvaluation:
-    """Evaluate latency, energy and deadline feasibility together.
+    """同时评价时延、能耗和时限可行性。
 
-    Parameters
-    ----------
     task:
-        Computation task to evaluate.
+        待评价的计算任务。
     resources:
-        Direct-link communication and computing resources.
+        直连通信与计算资源。
     energy_coefficient:
-        CPU energy coefficient zeta.
+        CPU 能耗系数 zeta。
     deadline_tolerance_s:
-        Small numerical tolerance used when comparing the calculated
-        latency with T_max.
+        将计算时延与 T_max 比较时采用的数值容差。
 
-    Returns
-    -------
-    DirectTaskEvaluation
-        Detailed latency and energy breakdown.
+    返回详细的时延与能耗分解结果。
     """
     energy_coefficient = _validate_finite(
         "energy_coefficient",
@@ -460,7 +422,7 @@ def evaluate_direct_task(
         strictly_positive=False,
     )
 
-    # Equation (12): latency components.
+    # 公式（12）：时延分量。
     upload_latency_s = transmission_time_s(
         task.input_bits,
         resources.uplink_rate_bps,
@@ -480,7 +442,7 @@ def evaluate_direct_task(
         + download_latency_s
     )
 
-    # Equation (13): energy components.
+    # 公式（13）：能耗分量。
     upload_energy_j = (
         resources.vehicle_tx_power_w
         * upload_latency_s

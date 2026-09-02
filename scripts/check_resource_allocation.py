@@ -18,7 +18,7 @@ from scripts._config_helpers import (
 def main(argv: Sequence[str] | None = None) -> None:
     config, experiment = load_script_config(
         "direct_resource",
-        __doc__ or "Direct resource-allocation check",
+        __doc__ or "直连资源分配检查",
         argv,
     )
     capacity_items = capacities(experiment["capacities"])
@@ -39,14 +39,14 @@ def main(argv: Sequence[str] | None = None) -> None:
     for item in evaluation.tasks:
         print(
             item.task_id,
-            f"bandwidth={item.allocation.bandwidth_hz / 1e6:.2f} MHz",
-            f"cpu={item.allocation.cpu_frequency_hz / 1e9:.2f} GHz",
-            f"power={item.allocation.node_transmit_power_w:.2f} W",
-            f"latency={item.metrics.total_latency_s:.6f} s",
-            f"energy={item.metrics.total_energy_j:.6f} J",
+            f"带宽={item.allocation.bandwidth_hz / 1e6:.2f} MHz",
+            f"CPU={item.allocation.cpu_frequency_hz / 1e9:.2f} GHz",
+            f"功率={item.allocation.node_transmit_power_w:.2f} W",
+            f"时延={item.metrics.total_latency_s:.6f} s",
+            f"能耗={item.metrics.total_energy_j:.6f} J",
         )
     print(f"J={evaluation.weighted_objective:.6f}")
-    print(f"feasible={evaluation.feasible}")
+    print(f"是否可行={evaluation.feasible}")
 
 
 if __name__ == "__main__":

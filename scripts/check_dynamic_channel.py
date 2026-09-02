@@ -35,7 +35,7 @@ from scripts._config_helpers import load_script_config
 
 @dataclass(frozen=True)
 class ExperimentConfig:
-    """Parameters that remain fixed during the experiment."""
+    """实验过程中保持不变的参数。"""
 
     number_of_slots: int
     time_step_s: float
@@ -68,13 +68,13 @@ class ExperimentConfig:
 
     def __post_init__(self) -> None:
         if self.number_of_slots <= 0:
-            raise ValueError("number_of_slots must be greater than 0")
+            raise ValueError("number_of_slots 必须大于 0")
         if self.time_step_s <= 0.0:
-            raise ValueError("time_step_s must be greater than 0")
+            raise ValueError("time_step_s 必须大于 0")
         if not 0.0 <= self.blockage_probability <= 1.0:
-            raise ValueError("blockage_probability must be in [0, 1]")
+            raise ValueError("blockage_probability 必须位于 [0, 1] 内")
         if self.smoothing_window <= 0:
-            raise ValueError("smoothing_window must be greater than 0")
+            raise ValueError("smoothing_window 必须大于 0")
 
     @classmethod
     def from_mapping(
@@ -82,7 +82,7 @@ class ExperimentConfig:
         root: Mapping[str, Any],
         experiment: Mapping[str, Any],
     ) -> "ExperimentConfig":
-        """Construct the experiment solely from the TOML configuration."""
+        """完全根据 TOML 配置构造实验。"""
 
         paper_channel = root["paper"]["channel"]
         assumed_channel = root["assumptions"]["channel"]
@@ -93,7 +93,7 @@ class ExperimentConfig:
 
         def vector3(value: Sequence[float]) -> tuple[float, float, float]:
             if len(value) != 3:
-                raise ValueError("configured mobility vectors must have length 3")
+                raise ValueError("配置的移动向量长度必须为 3")
             return (float(value[0]), float(value[1]), float(value[2]))
 
         return cls(
@@ -139,7 +139,7 @@ class ExperimentConfig:
 
 @dataclass(frozen=True)
 class SlotRecord:
-    """Values recorded from one simulation time slot."""
+    """一个仿真时隙记录的数值。"""
 
     slot: int
     time_s: float
@@ -165,15 +165,15 @@ class SlotRecord:
 
 
 def linear_to_db(value: float, floor: float = 1.0e-300) -> float:
-    """Convert a positive linear power ratio to decibels."""
+    """将正的线性功率比转换为分贝。"""
     return 10.0 * np.log10(max(float(value), floor))
 
 
 def moving_average(values: np.ndarray, window: int) -> np.ndarray:
-    """Return a centered moving average without zero-padding artifacts."""
+    """返回不含零填充伪影的居中移动平均值。"""
     values = np.asarray(values, dtype=np.float64)
     if values.ndim != 1:
-        raise ValueError("values must be one-dimensional")
+        raise ValueError("values 必须是一维数组")
 
     window = min(int(window), len(values))
     if window <= 1:
@@ -192,10 +192,9 @@ def moving_average(values: np.ndarray, window: int) -> np.ndarray:
 
 
 def initial_states(config: ExperimentConfig) -> tuple[MobilityState, MobilityState]:
-    """Create one ground vehicle and one UAV for the demonstration.
+    """为演示创建一辆地面车辆和一架无人机。
 
-    The vehicle initially approaches the UAV and later moves away from it.
-    Consequently, the distance curve should first decrease and then increase.
+    车辆先接近无人机，随后远离，因此距离曲线应先下降再上升。
     """
     vehicle = MobilityState(
         position_m=np.array(config.initial_vehicle_position_m),
@@ -209,7 +208,7 @@ def initial_states(config: ExperimentConfig) -> tuple[MobilityState, MobilitySta
 
 
 def run_experiment(config: ExperimentConfig) -> list[SlotRecord]:
-    """Run the mobility-channel-rate pipeline for all time slots."""
+    """在全部时隙上运行移动—信道—速率流水线。"""
     rng = np.random.default_rng(config.random_seed)
     vehicle, uav = initial_states(config)
 
@@ -225,7 +224,7 @@ def run_experiment(config: ExperimentConfig) -> list[SlotRecord]:
     records: list[SlotRecord] = []
 
     for slot in range(config.number_of_slots):
-        # Equations (4) and (5): update vehicle and UAV positions.
+        # 公式（4）和（5）：更新车辆与无人机的位置。
         vehicle_noise = sample_mobility_noise(
             config.vehicle_mobility_noise_std_m,
             rng=rng,
@@ -249,7 +248,7 @@ def run_experiment(config: ExperimentConfig) -> list[SlotRecord]:
             bounds=uav_bounds,
         )
 
-        # Equations (6)-(8): distance, random channel and achievable rate.
+        # 公式（6）至（8）：计算距离、随机信道和可达速率。
         link = sample_wireless_link(
             rng=rng,
             vehicle_position=vehicle.position_m,
@@ -296,7 +295,7 @@ def run_experiment(config: ExperimentConfig) -> list[SlotRecord]:
 
 
 def save_records_csv(records: list[SlotRecord], output_path: Path) -> None:
-    """Save all per-slot values so later experiments can reuse them."""
+    """保存每个时隙的全部数值，供后续实验复用。"""
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     field_names = list(SlotRecord.__dataclass_fields__)
@@ -314,7 +313,7 @@ def plot_results(
     config: ExperimentConfig,
     output_path: Path,
 ) -> None:
-    """Plot distance, gain, rate and blockage state over time."""
+    """绘制距离、增益、速率和遮挡状态随时间的变化。"""
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     time_s = np.array([record.time_s for record in records])
@@ -334,8 +333,8 @@ def plot_results(
     )
 
     axes[0].plot(time_s, distance_m, color="#1f77b4", linewidth=2.0)
-    axes[0].set_ylabel("Distance (m)")
-    axes[0].set_title("DM-JCR dynamic mobility and wireless channel")
+    axes[0].set_ylabel("距离（m）")
+    axes[0].set_title("DM-JCR 动态移动与无线信道")
     axes[0].grid(alpha=0.25)
 
     axes[1].plot(
@@ -343,16 +342,16 @@ def plot_results(
         gain_db,
         color="#9ecae1",
         linewidth=1.0,
-        label="instantaneous",
+        label="瞬时值",
     )
     axes[1].plot(
         time_s,
         smooth_gain_db,
         color="#08519c",
         linewidth=2.0,
-        label=f"{config.smoothing_window}-slot mean",
+        label=f"{config.smoothing_window} 时隙均值",
     )
-    axes[1].set_ylabel("Channel gain (dB)")
+    axes[1].set_ylabel("信道增益（dB）")
     axes[1].legend(loc="best")
     axes[1].grid(alpha=0.25)
 
@@ -361,16 +360,16 @@ def plot_results(
         rate_mbps,
         color="#a1d99b",
         linewidth=1.0,
-        label="instantaneous",
+        label="瞬时值",
     )
     axes[2].plot(
         time_s,
         smooth_rate_mbps,
         color="#238b45",
         linewidth=2.0,
-        label=f"{config.smoothing_window}-slot mean",
+        label=f"{config.smoothing_window} 时隙均值",
     )
-    axes[2].set_ylabel("Rate (Mbit/s)")
+    axes[2].set_ylabel("速率（Mbit/s）")
     axes[2].legend(loc="best")
     axes[2].grid(alpha=0.25)
 
@@ -381,9 +380,9 @@ def plot_results(
         color="#d62728",
         linewidth=1.5,
     )
-    axes[3].set_yticks([0, 1], labels=["LoS", "blocked"])
-    axes[3].set_xlabel("Time (s)")
-    axes[3].set_ylabel("Link state")
+    axes[3].set_yticks([0, 1], labels=["视距", "已遮挡"])
+    axes[3].set_xlabel("时间（s）")
+    axes[3].set_ylabel("链路状态")
     axes[3].grid(alpha=0.25)
 
     figure.tight_layout()
@@ -392,7 +391,7 @@ def plot_results(
 
 
 def print_summary(records: list[SlotRecord], config: ExperimentConfig) -> None:
-    """Print numerical checks for the expected physical trends."""
+    """输出用于检查预期物理趋势的数值。"""
     distance_m = np.array([record.distance_m for record in records])
     rate_mbps = np.array([record.rate_mbps for record in records])
     blocked = np.array([record.blocked for record in records], dtype=bool)
@@ -405,28 +404,28 @@ def print_summary(records: list[SlotRecord], config: ExperimentConfig) -> None:
     los_rate = rate_mbps[~blocked]
     blocked_rate = rate_mbps[blocked]
 
-    print("Dynamic channel experiment completed")
-    print(f"Slots: {len(records)}")
+    print("动态信道实验已完成")
+    print(f"时隙数：{len(records)}")
     print(
-        "Distance range: "
-        f"{distance_m.min():.2f} m to {distance_m.max():.2f} m"
+        "距离范围："
+        f"{distance_m.min():.2f} m 至 {distance_m.max():.2f} m"
     )
-    print(f"Observed blockage ratio: {blocked.mean():.3f}")
-    print(f"Mean LoS rate: {los_rate.mean():.3f} Mbit/s")
-    print(f"Mean blocked rate: {blocked_rate.mean():.3f} Mbit/s")
+    print(f"观测遮挡比例：{blocked.mean():.3f}")
+    print(f"平均视距速率：{los_rate.mean():.3f} Mbit/s")
+    print(f"平均遮挡速率：{blocked_rate.mean():.3f} Mbit/s")
     print(
-        "Correlation(distance, smoothed rate): "
+        "距离与平滑速率的相关系数："
         f"{distance_rate_correlation:.3f}"
     )
-    print("Expected: blocked rate < LoS rate")
-    print("Expected: distance-rate correlation is usually negative")
+    print("预期：遮挡速率小于视距速率")
+    print("预期：距离与速率通常呈负相关")
 
 
 def main(argv: Sequence[str] | None = None) -> None:
-    """Run the experiment and write its two output files."""
+    """运行实验并写入两个输出文件。"""
     root, experiment = load_script_config(
         "dynamic_channel",
-        __doc__ or "Dynamic channel check",
+        __doc__ or "动态信道检查",
         argv,
     )
     config = ExperimentConfig.from_mapping(root, experiment)
@@ -439,8 +438,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     plot_results(records, config, figure_path)
     print_summary(records, config)
 
-    print(f"CSV saved to: {csv_path.resolve()}")
-    print(f"Figure saved to: {figure_path.resolve()}")
+    print(f"CSV 已保存至：{csv_path.resolve()}")
+    print(f"图像已保存至：{figure_path.resolve()}")
 
 
 if __name__ == "__main__":

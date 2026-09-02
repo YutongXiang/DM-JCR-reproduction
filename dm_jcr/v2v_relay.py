@@ -25,23 +25,23 @@ def _validate_value(
     *,
     strictly_positive: bool,
 ) -> float:
-    """Validate a finite scalar used by the V2V relay model."""
+    """校验车车中继模型使用的有限标量。"""
     value = float(value)
     if not isfinite(value):
-        raise ValueError(f"{name} must be finite")
+        raise ValueError(f"{name} 必须为有限数值")
     if strictly_positive and value <= 0.0:
-        raise ValueError(f"{name} must be greater than 0")
+        raise ValueError(f"{name} 必须大于 0")
     if not strictly_positive and value < 0.0:
-        raise ValueError(f"{name} must be non-negative")
+        raise ValueError(f"{name} 必须为非负数")
     return value
 
 
 @dataclass(frozen=True)
 class V2VTask:
-    """Data-forwarding task sent from one vehicle to another.
+    """从一辆车发送到另一辆车的数据转发任务。
 
-    ``data_bits`` is :math:`D_{v,k}^t`; ``max_latency_s`` is the maximum
-    tolerable latency :math:`T_{v,k}^{max,t}`.
+    ``data_bits`` 为 :math:`D_{v,k}^t`；``max_latency_s`` 为最大可容忍时延
+    :math:`T_{v,k}^{max,t}`。
     """
 
     data_bits: float
@@ -70,7 +70,7 @@ class V2VTask:
 
 @dataclass(frozen=True)
 class V2VRelayResources:
-    """Communication and computing resources for UAV-assisted V2V relay."""
+    """无人机辅助车车中继使用的通信与计算资源。"""
 
     source_to_uav_rate_bps: float
     uav_to_destination_rate_bps: float
@@ -117,7 +117,7 @@ class V2VRelayResources:
 
 @dataclass(frozen=True)
 class V2VRelayMetrics:
-    """Term-by-term latency and energy results for equations (14), (15)."""
+    """公式（14）和（15）的逐项时延与能耗结果。"""
 
     source_to_uav_time_s: float
     uav_to_destination_time_s: float
@@ -138,13 +138,13 @@ def evaluate_v2v_relay(
     energy_coefficient: float = DEFAULT_CPU_ENERGY_COEFFICIENT,
     deadline_tolerance_s: float = 1.0e-12,
 ) -> V2VRelayMetrics:
-    r"""Evaluate equations (14) and (15) term by term.
+    r"""逐项评价公式（14）和（15）。
 
-    Equation (14):
+    公式（14）：
 
     .. math:: T = D/r_{v,u} + D/r_{u,v^*} + \phi D/f_u.
 
-    Equation (15):
+    公式（15）：
 
     .. math:: E = p_vD/r_{v,u} + p_uD/r_{u,v^*} + \zeta f_u^2\phi D.
     """
@@ -231,7 +231,7 @@ def v2v_relay_latency_s(
     task: V2VTask,
     resources: V2VRelayResources,
 ) -> float:
-    """Return only the total latency from equation (14)."""
+    """仅返回公式（14）的总时延。"""
     return evaluate_v2v_relay(task, resources).total_latency_s
 
 
@@ -240,7 +240,7 @@ def v2v_relay_energy_j(
     resources: V2VRelayResources,
     energy_coefficient: float = DEFAULT_CPU_ENERGY_COEFFICIENT,
 ) -> float:
-    """Return only the total energy from equation (15)."""
+    """仅返回公式（15）的总能耗。"""
     return evaluate_v2v_relay(
         task,
         resources,

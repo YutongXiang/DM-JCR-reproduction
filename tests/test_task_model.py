@@ -23,14 +23,14 @@ from dm_jcr.task_model import (
 
 @pytest.fixture
 def example_task() -> ComputationTask:
-    """Create a task with values that are easy to calculate manually.
+    """创建一个便于手工计算的任务。
 
     D = 8,000,000 bit
     C = 2,000,000,000 cycle
     mu = 0.1
     T_max = 3.5 s
 
-    Therefore, the output size is:
+    因此输出大小为：
 
         mu * D = 800,000 bit
     """
@@ -44,18 +44,18 @@ def example_task() -> ComputationTask:
 
 @pytest.fixture
 def example_resources() -> DirectLinkResources:
-    """Create one direct-link resource allocation.
+    """创建一个直连资源分配。
 
-    Uplink rate:
+    上行速率：
         r_vn = 4 Mbit/s
 
-    Downlink rate:
+    下行速率：
         r_nv = 2 Mbit/s
 
-    Edge CPU frequency:
+    边缘 CPU 频率：
         f_n = 2 GHz
 
-    Transmission powers:
+    发射功率：
         p_v = 0.2 W
         p_n = 0.5 W
     """
@@ -69,7 +69,7 @@ def example_resources() -> DirectLinkResources:
 
 
 def test_kilobytes_to_bits() -> None:
-    """1 KB should equal 8000 bit in the decimal-KB convention."""
+    """按十进制 KB 约定，1 KB 应等于 8000 bit。"""
     assert kilobytes_to_bits(1.0) == pytest.approx(8000.0)
     assert kilobytes_to_bits(0.0) == pytest.approx(0.0)
     assert kilobytes_to_bits(1000.0) == pytest.approx(8.0e6)
@@ -78,7 +78,7 @@ def test_kilobytes_to_bits() -> None:
 def test_task_output_bits(
     example_task: ComputationTask,
 ) -> None:
-    """The result-data size should be mu times the input size."""
+    """结果数据大小应为输入大小的 mu 倍。"""
     expected_output_bits = 0.1 * 8.0e6
 
     assert example_task.output_bits == pytest.approx(
@@ -88,7 +88,7 @@ def test_task_output_bits(
 
 
 def test_transmission_time() -> None:
-    """Transmission time should follow T = D / r."""
+    """传输时间应符合 T = D / r。"""
     data_bits = 8.0e6
     rate_bps = 4.0e6
 
@@ -101,7 +101,7 @@ def test_transmission_time() -> None:
 
 
 def test_zero_data_has_zero_transmission_time() -> None:
-    """Transmitting zero bits should require zero seconds."""
+    """传输零比特应耗时零秒。"""
     result = transmission_time_s(
         data_bits=0.0,
         rate_bps=4.0e6,
@@ -111,7 +111,7 @@ def test_zero_data_has_zero_transmission_time() -> None:
 
 
 def test_computation_time() -> None:
-    """Computation time should follow T = C / f."""
+    """计算时间应符合 T = C / f。"""
     cpu_cycles = 2.0e9
     cpu_frequency_hz = 2.0e9
 
@@ -124,7 +124,7 @@ def test_computation_time() -> None:
 
 
 def test_dynamic_cpu_energy() -> None:
-    """CPU energy should follow E = zeta * f^2 * C."""
+    """CPU 能耗应符合 E = zeta * f^2 * C。"""
     cpu_cycles = 2.0e9
     cpu_frequency_hz = 2.0e9
     zeta = DEFAULT_CPU_ENERGY_COEFFICIENT
@@ -150,18 +150,18 @@ def test_direct_task_latency(
     example_task: ComputationTask,
     example_resources: DirectLinkResources,
 ) -> None:
-    """Verify the direct branch of equation (12).
+    """验证公式（12）的直连分支。
 
-    Upload:
+    上传：
         D / r_vn = 8e6 / 4e6 = 2.0 s
 
-    Computation:
+    计算：
         C / f_n = 2e9 / 2e9 = 1.0 s
 
-    Download:
+    下载：
         mu*D / r_nv = 0.8e6 / 2e6 = 0.4 s
 
-    Total:
+    总计：
         2.0 + 1.0 + 0.4 = 3.4 s
     """
     result = direct_task_latency_s(
@@ -176,18 +176,18 @@ def test_direct_task_energy(
     example_task: ComputationTask,
     example_resources: DirectLinkResources,
 ) -> None:
-    """Verify the direct branch of equation (13).
+    """验证公式（13）的直连分支。
 
-    Vehicle upload energy:
+    车辆上传能耗：
         p_v * D/r_vn = 0.2 * 2.0 = 0.4 J
 
-    Edge computation energy:
+    边缘计算能耗：
         zeta * f_n^2 * C = 4.0 J
 
-    Node download energy:
+    节点下载能耗：
         p_n * mu*D/r_nv = 0.5 * 0.4 = 0.2 J
 
-    Total:
+    总计：
         0.4 + 4.0 + 0.2 = 4.6 J
     """
     result = direct_task_energy_j(
@@ -202,25 +202,25 @@ def test_evaluate_direct_task(
     example_task: ComputationTask,
     example_resources: DirectLinkResources,
 ) -> None:
-    """Check all latency and energy components together."""
+    """同时检查全部时延与能耗分量。"""
     result = evaluate_direct_task(
         task=example_task,
         resources=example_resources,
     )
 
-    # Equation (12): latency breakdown.
+    # 公式（12）：时延分解。
     assert result.upload_latency_s == pytest.approx(2.0)
     assert result.computation_latency_s == pytest.approx(1.0)
     assert result.download_latency_s == pytest.approx(0.4)
     assert result.total_latency_s == pytest.approx(3.4)
 
-    # Equation (13): energy breakdown.
+    # 公式（13）：能耗分解。
     assert result.upload_energy_j == pytest.approx(0.4)
     assert result.computation_energy_j == pytest.approx(4.0)
     assert result.download_energy_j == pytest.approx(0.2)
     assert result.total_energy_j == pytest.approx(4.6)
 
-    # The deadline is 3.5 s, while total latency is 3.4 s.
+    # 时限为 3.5 s，总时延为 3.4 s。
     assert result.meets_deadline is True
 
 
@@ -228,7 +228,7 @@ def test_evaluation_totals_match_individual_functions(
     example_task: ComputationTask,
     example_resources: DirectLinkResources,
 ) -> None:
-    """The detailed interface should agree with the total functions."""
+    """详细评价接口应与总量计算函数一致。"""
     evaluation = evaluate_direct_task(
         task=example_task,
         resources=example_resources,
@@ -254,7 +254,7 @@ def test_evaluation_totals_match_individual_functions(
 def test_task_misses_deadline(
     example_resources: DirectLinkResources,
 ) -> None:
-    """A 3.4-second task should miss a 3.0-second deadline."""
+    """耗时 3.4 秒的任务应错过 3.0 秒时限。"""
     task = ComputationTask(
         input_bits=8.0e6,
         cpu_cycles=2.0e9,
@@ -274,7 +274,7 @@ def test_task_misses_deadline(
 def test_task_exactly_meets_deadline(
     example_resources: DirectLinkResources,
 ) -> None:
-    """Latency equal to the deadline should be feasible."""
+    """时延等于时限时应判定为可行。"""
     task = ComputationTask(
         input_bits=8.0e6,
         cpu_cycles=2.0e9,
@@ -295,7 +295,7 @@ def test_higher_cpu_frequency_reduces_latency(
     example_task: ComputationTask,
     example_resources: DirectLinkResources,
 ) -> None:
-    """A higher CPU frequency should reduce computation latency."""
+    """提高 CPU 频率应缩短计算时延。"""
     faster_resources = DirectLinkResources(
         uplink_rate_bps=example_resources.uplink_rate_bps,
         downlink_rate_bps=example_resources.downlink_rate_bps,
@@ -315,10 +315,10 @@ def test_higher_cpu_frequency_reduces_latency(
 
     assert faster_latency < original_latency
 
-    # New computation time:
+    # 新的计算时间：
     # 2e9 / 4e9 = 0.5 s
     #
-    # New total:
+    # 新的总时延：
     # 2.0 + 0.5 + 0.4 = 2.9 s
     assert faster_latency == pytest.approx(2.9)
 
@@ -327,7 +327,7 @@ def test_higher_cpu_frequency_increases_energy(
     example_task: ComputationTask,
     example_resources: DirectLinkResources,
 ) -> None:
-    """A higher CPU frequency should increase dynamic CPU energy."""
+    """提高 CPU 频率应增加 CPU 动态能耗。"""
     faster_resources = DirectLinkResources(
         uplink_rate_bps=example_resources.uplink_rate_bps,
         downlink_rate_bps=example_resources.downlink_rate_bps,
@@ -347,12 +347,12 @@ def test_higher_cpu_frequency_increases_energy(
 
     assert faster_energy > original_energy
 
-    # Doubling f makes the CPU-energy term four times larger:
+    # f 加倍会使 CPU 能耗项变为四倍：
     #
-    # original CPU energy = 4 J
-    # new CPU energy = 16 J
+    # 原 CPU 能耗 = 4 J
+    # 新 CPU 能耗 = 16 J
     #
-    # Total = 0.4 + 16 + 0.2 = 16.6 J
+    # 总计 = 0.4 + 16 + 0.2 = 16.6 J
     assert faster_energy == pytest.approx(16.6)
 
 
@@ -370,7 +370,7 @@ def test_transmission_time_rejects_invalid_parameters(
     data_bits: float,
     rate_bps: float,
 ) -> None:
-    """Invalid data sizes and rates should raise ValueError."""
+    """无效数据大小和速率应触发 ValueError。"""
     with pytest.raises(ValueError):
         transmission_time_s(
             data_bits=data_bits,
@@ -392,7 +392,7 @@ def test_computation_time_rejects_invalid_parameters(
     cpu_cycles: float,
     cpu_frequency_hz: float,
 ) -> None:
-    """Invalid cycle counts and CPU frequencies should fail."""
+    """无效周期数和 CPU 频率应触发失败。"""
     with pytest.raises(ValueError):
         computation_time_s(
             cpu_cycles=cpu_cycles,
@@ -416,7 +416,7 @@ def test_computation_task_rejects_invalid_parameters(
     max_latency_s: float,
     output_ratio: float,
 ) -> None:
-    """ComputationTask should reject physically invalid values."""
+    """ComputationTask 应拒绝物理上无效的数值。"""
     with pytest.raises(ValueError):
         ComputationTask(
             input_bits=input_bits,
@@ -449,7 +449,7 @@ def test_direct_resources_reject_invalid_parameters(
     vehicle_tx_power_w: float,
     node_tx_power_w: float,
 ) -> None:
-    """DirectLinkResources should reject invalid resources."""
+    """DirectLinkResources 应拒绝无效资源。"""
     with pytest.raises(ValueError):
         DirectLinkResources(
             uplink_rate_bps=uplink_rate_bps,

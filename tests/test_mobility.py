@@ -15,7 +15,7 @@ from dm_jcr.mobility import (
 
 
 def test_update_position_without_noise() -> None:
-    """Verify l_next = l + velocity * delta_t."""
+    """验证 l_next = l + velocity * delta_t。"""
     result = update_position(
         position_m=[10.0, 20.0, 30.0],
         velocity_mps=[4.0, -2.0, 1.0],
@@ -26,7 +26,7 @@ def test_update_position_without_noise() -> None:
 
 
 def test_update_position_includes_mobility_noise() -> None:
-    """Verify that omega is added after the deterministic displacement."""
+    """验证确定性位移之后会叠加 omega。"""
     result = update_position(
         position_m=[10.0, 20.0, 30.0],
         velocity_mps=[4.0, -2.0, 1.0],
@@ -38,7 +38,7 @@ def test_update_position_includes_mobility_noise() -> None:
 
 
 def test_zero_velocity_and_noise_keep_position_fixed() -> None:
-    """A stationary node should remain at its current position."""
+    """静止节点应保持当前位置。"""
     result = update_position(
         position_m=[100.0, 200.0, 50.0],
         velocity_mps=[0.0, 0.0, 0.0],
@@ -50,7 +50,7 @@ def test_zero_velocity_and_noise_keep_position_fixed() -> None:
 
 
 def test_vehicle_is_constrained_to_ground_plane() -> None:
-    """A vehicle must keep z = 0 in equation (4)."""
+    """公式（4）中的车辆必须保持 z = 0。"""
     state = MobilityState(
         position_m=[10.0, 20.0, 5.0],
         velocity_mps=[3.0, 4.0, 2.0],
@@ -67,7 +67,7 @@ def test_vehicle_is_constrained_to_ground_plane() -> None:
 
 
 def test_uav_moves_in_three_dimensions() -> None:
-    """A UAV may change altitude in equation (5)."""
+    """公式（5）中的无人机可以改变高度。"""
     state = MobilityState(
         position_m=[100.0, 200.0, 80.0],
         velocity_mps=[5.0, -2.0, 3.0],
@@ -87,7 +87,7 @@ def test_uav_moves_in_three_dimensions() -> None:
 
 
 def test_position_is_clipped_to_simulation_bounds() -> None:
-    """Nodes that move outside the area should be placed on its boundary."""
+    """移出区域的节点应被截断至区域边界。"""
     bounds = SimulationBounds(
         minimum_m=[0.0, 0.0, 20.0],
         maximum_m=[1000.0, 1000.0, 120.0],
@@ -102,7 +102,7 @@ def test_position_is_clipped_to_simulation_bounds() -> None:
 
 
 def test_update_uav_position_applies_bounds() -> None:
-    """Boundary handling should also work during a UAV update."""
+    """无人机更新过程也应正确处理边界。"""
     state = MobilityState(
         position_m=[990.0, 500.0, 119.0],
         velocity_mps=[20.0, 0.0, 5.0],
@@ -122,7 +122,7 @@ def test_update_uav_position_applies_bounds() -> None:
 
 
 def test_noise_sampling_is_reproducible_with_a_seed() -> None:
-    """The same seed must produce the same mobility-noise sequence."""
+    """相同种子必须产生相同的移动噪声序列。"""
     first_rng = np.random.default_rng(2026)
     second_rng = np.random.default_rng(2026)
 
@@ -133,7 +133,7 @@ def test_noise_sampling_is_reproducible_with_a_seed() -> None:
 
 
 def test_horizontal_noise_has_zero_vertical_component() -> None:
-    """Ground-vehicle mobility noise should not change altitude."""
+    """地面车辆的移动噪声不应改变高度。"""
     noise = sample_mobility_noise(
         [1.0, 1.0, 5.0],
         rng=np.random.default_rng(7),
@@ -144,7 +144,7 @@ def test_horizontal_noise_has_zero_vertical_component() -> None:
 
 
 def test_update_does_not_modify_caller_arrays() -> None:
-    """Position updates should return new arrays rather than mutate inputs."""
+    """位置更新应返回新数组，而不应修改输入。"""
     position = np.array([10.0, 20.0, 30.0])
     velocity = np.array([1.0, 2.0, 3.0])
     original_position = position.copy()
@@ -158,7 +158,7 @@ def test_update_does_not_modify_caller_arrays() -> None:
 
 @pytest.mark.parametrize("time_step_s", [0.0, -1.0, np.inf, np.nan])
 def test_invalid_time_step_is_rejected(time_step_s: float) -> None:
-    """A simulation time slot must have a finite positive duration."""
+    """仿真时隙必须具有有限且为正的持续时间。"""
     with pytest.raises(ValueError):
         update_position(
             position_m=[0.0, 0.0, 0.0],
@@ -177,7 +177,7 @@ def test_invalid_time_step_is_rejected(time_step_s: float) -> None:
     ],
 )
 def test_invalid_position_vector_is_rejected(bad_vector: list[float]) -> None:
-    """Mobility vectors must contain exactly three finite values."""
+    """移动向量必须恰好包含三个有限数值。"""
     with pytest.raises(ValueError):
         MobilityState(
             position_m=bad_vector,
@@ -186,7 +186,7 @@ def test_invalid_position_vector_is_rejected(bad_vector: list[float]) -> None:
 
 
 def test_invalid_bounds_are_rejected() -> None:
-    """Every upper boundary must be at least its lower boundary."""
+    """每个上边界都必须不小于对应的下边界。"""
     with pytest.raises(ValueError):
         SimulationBounds(
             minimum_m=[0.0, 0.0, 20.0],
@@ -195,7 +195,7 @@ def test_invalid_bounds_are_rejected() -> None:
 
 
 def test_vehicle_bounds_must_include_ground_plane() -> None:
-    """Vehicle movement is invalid if the configured area excludes z = 0."""
+    """若配置区域不包含 z = 0，则车辆移动配置无效。"""
     state = MobilityState(
         position_m=[0.0, 0.0, 0.0],
         velocity_mps=[1.0, 0.0, 0.0],
@@ -205,7 +205,7 @@ def test_vehicle_bounds_must_include_ground_plane() -> None:
         maximum_m=[1000.0, 1000.0, 120.0],
     )
 
-    with pytest.raises(ValueError, match="ground plane"):
+    with pytest.raises(ValueError, match="地面平面"):
         update_vehicle_position(
             state,
             time_step_s=1.0,
@@ -223,6 +223,6 @@ def test_vehicle_bounds_must_include_ground_plane() -> None:
     ],
 )
 def test_invalid_noise_standard_deviation_is_rejected(std_m: object) -> None:
-    """Noise standard deviations must be finite and non-negative."""
+    """噪声标准差必须为非负有限数值。"""
     with pytest.raises(ValueError):
         sample_mobility_noise(std_m)

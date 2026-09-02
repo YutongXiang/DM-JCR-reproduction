@@ -24,7 +24,7 @@ def make_candidate(
     predicted_latency_s: float = 0.8,
     maximum_latency_s: float = 1.0,
 ) -> NodeCandidateState:
-    """Construct a candidate from easy-to-read utilization ratios."""
+    """根据易读的利用率构造候选节点。"""
     return NodeCandidateState(
         node_id=node_id,
         snr=snr,
@@ -40,7 +40,7 @@ def make_candidate(
 
 
 def test_equation_9_term_by_term() -> None:
-    """Verify every reward and penalty in equation (9)."""
+    """逐项验证公式（9）的奖励与惩罚。"""
     candidate = make_candidate(
         "rsu-1",
         snr=exp(2.0) - 1.0,
@@ -193,12 +193,12 @@ def test_hysteresis_selects_best_if_previous_node_disappears() -> None:
 
 
 def test_empty_candidate_collection_is_rejected() -> None:
-    with pytest.raises(ValueError, match="at least one"):
+    with pytest.raises(ValueError, match="至少"):
         select_offloading_node([], UtilityWeights())
 
 
 def test_duplicate_candidate_ids_are_rejected() -> None:
-    with pytest.raises(ValueError, match="unique"):
+    with pytest.raises(ValueError, match="唯一"):
         select_offloading_node(
             [make_candidate("same"), make_candidate("same")],
             UtilityWeights(),
@@ -206,7 +206,7 @@ def test_duplicate_candidate_ids_are_rejected() -> None:
 
 
 def test_selected_indicator_node_must_exist() -> None:
-    with pytest.raises(ValueError, match="one of the candidates"):
+    with pytest.raises(ValueError, match="属于候选节点"):
         build_assignment_indicators(["uav-1"], "rsu-1")
 
 
@@ -220,7 +220,7 @@ def test_invalid_weight_is_rejected(bad_weight: float) -> None:
 
 
 def test_all_zero_weights_are_rejected() -> None:
-    with pytest.raises(ValueError, match="at least one"):
+    with pytest.raises(ValueError, match="至少"):
         UtilityWeights(0.0, 0.0, 0.0, 0.0, 0.0)
 
 

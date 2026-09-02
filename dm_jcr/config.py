@@ -14,11 +14,11 @@ DEFAULT_CONFIG_PATH = (
 
 
 class ConfigError(ValueError):
-    """Raised when the reproduction configuration is malformed."""
+    """复现配置格式错误时抛出的异常。"""
 
 
 def _validate_supported_assumptions(data: Mapping[str, Any]) -> None:
-    """Reject policy edits that the current implementation cannot honor."""
+    """拒绝当前实现尚不支持的复现策略。"""
 
     assumptions = data["assumptions"]
     supported = {
@@ -39,17 +39,17 @@ def _validate_supported_assumptions(data: Mapping[str, Any]) -> None:
         actual = assumptions.get(section, {}).get(key)
         if actual != expected:
             raise ConfigError(
-                f"unsupported assumptions.{section}.{key}={actual!r}; "
-                f"current implementation requires {expected!r}"
+                f"不支持 assumptions.{section}.{key}={actual!r}；"
+                f"当前实现要求该值为 {expected!r}"
             )
 
 
 def load_config(path: str | Path | None = None) -> dict[str, Any]:
-    """Read and minimally validate a DM-JCR TOML configuration."""
+    """读取 DM-JCR TOML 配置并完成必要校验。"""
 
     config_path = Path(path) if path is not None else DEFAULT_CONFIG_PATH
     if not config_path.is_file():
-        raise FileNotFoundError(f"configuration file not found: {config_path}")
+        raise FileNotFoundError(f"未找到配置文件：{config_path}")
 
     with config_path.open("rb") as file:
         data = tomllib.load(file)
@@ -57,24 +57,26 @@ def load_config(path: str | Path | None = None) -> dict[str, Any]:
     version = data.get("metadata", {}).get("schema_version")
     if version != 1:
         raise ConfigError(
-            f"unsupported configuration schema_version {version!r}; expected 1"
+            f"不支持配置 schema_version={version!r}；应为 1"
         )
     for section in ("paper", "assumptions", "experiments"):
         if not isinstance(data.get(section), Mapping):
-            raise ConfigError(f"missing or invalid [{section}] section")
+            raise ConfigError(f"缺少 [{section}] 配置节或其格式无效")
     _validate_supported_assumptions(data)
     return data
 
 
 def get_experiment(config: Mapping[str, Any], name: str) -> Mapping[str, Any]:
-    """Return one named experiment section with a useful validation error."""
+    """返回指定实验配置节，并在配置无效时给出明确错误。"""
 
     experiments = config.get("experiments")
     if not isinstance(experiments, Mapping):
-        raise ConfigError("missing or invalid [experiments] section")
+        raise ConfigError("缺少 [experiments] 配置节或其格式无效")
     experiment = experiments.get(name)
     if not isinstance(experiment, Mapping):
-        raise ConfigError(f"missing or invalid [experiments.{name}] section")
+        raise ConfigError(
+            f"缺少 [experiments.{name}] 配置节或其格式无效"
+        )
     return experiment
 
 

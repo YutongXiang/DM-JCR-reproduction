@@ -22,42 +22,37 @@ Vector3: TypeAlias = NDArray[np.float64]
 
 
 def _as_vector3(name: str, value: ArrayLike) -> Vector3:
-    """Validate and copy a finite three-dimensional vector."""
+    """校验并复制一个元素有限的三维向量。"""
     vector = np.asarray(value, dtype=np.float64)
 
     if vector.shape != (3,):
         raise ValueError(
-            f"{name} must have shape (3,), got {vector.shape}"
+            f"{name} 的形状必须为 (3,)，实际为 {vector.shape}"
         )
     if not np.all(np.isfinite(vector)):
-        raise ValueError(f"{name} must contain only finite values")
+        raise ValueError(f"{name} 只能包含有限数值")
 
     return vector.copy()
 
 
 def _validate_positive(name: str, value: float) -> float:
-    """Validate a finite scalar that must be greater than zero."""
+    """校验一个必须大于零的有限标量。"""
     value = float(value)
     if not np.isfinite(value) or value <= 0.0:
-        raise ValueError(f"{name} must be finite and greater than 0")
+        raise ValueError(f"{name} 必须为大于 0 的有限数值")
     return value
 
 
 @dataclass(frozen=True)
 class MobilityState:
-    """Position and velocity of one vehicle or UAV.
+    """一辆车辆或一架无人机的位置与速度。
 
-    Parameters
-    ----------
     position_m:
-        Current position ``[x, y, z]`` in metres.
+        当前位置 ``[x, y, z]``，单位为米。
     velocity_mps:
-        Current velocity ``[vx, vy, vz]`` in metres per second.
+        当前速度 ``[vx, vy, vz]``，单位为米每秒。
 
-    Notes
-    -----
-    Input arrays are copied so that updating a state does not modify the
-    arrays supplied by the caller.
+    输入数组会被复制，因此状态更新不会修改调用方传入的数组。
     """
 
     position_m: Vector3
@@ -78,11 +73,10 @@ class MobilityState:
 
 @dataclass(frozen=True)
 class SimulationBounds:
-    """Axis-aligned boundary of the simulated region.
+    """与坐标轴对齐的仿真区域边界。
 
-    A position outside the region is clipped independently along x, y and z.
-    Equal lower and upper bounds are allowed, for example ``z_min = z_max = 0``
-    for a purely two-dimensional road region.
+    区域外的位置会沿 x、y、z 三个方向分别截断。上下界允许相等，例如纯二维
+    道路区域可设置 ``z_min = z_max = 0``。
     """
 
     minimum_m: Vector3
@@ -94,8 +88,7 @@ class SimulationBounds:
 
         if np.any(maximum < minimum):
             raise ValueError(
-                "maximum_m must be greater than or equal to minimum_m "
-                "on every axis"
+                "maximum_m 在每个坐标轴上都必须大于或等于 minimum_m"
             )
 
         object.__setattr__(self, "minimum_m", minimum)
@@ -108,25 +101,20 @@ def sample_mobility_noise(
     rng: np.random.Generator | None = None,
     horizontal_only: bool = False,
 ) -> Vector3:
-    """Sample the mobility-noise vector omega.
+    """采样移动噪声向量 omega。
 
-    The paper introduces mobility noise but does not specify its exact
-    distribution.  This reproduction uses independent zero-mean Gaussian
-    noise on each axis:
+    论文引入了移动噪声，但未说明具体分布。本复现在各坐标轴上采用相互独立的
+    零均值高斯噪声：
 
         omega ~ Normal(0, sigma^2)
 
-    Parameters
-    ----------
     std_m:
-        Standard deviation in metres.  It may be one scalar for all axes or
-        a vector ``[sigma_x, sigma_y, sigma_z]``.
+        标准差，单位为米。可以是所有坐标轴共用的标量，也可以是向量
+        ``[sigma_x, sigma_y, sigma_z]``。
     rng:
-        NumPy random-number generator.  Pass ``np.random.default_rng(seed)``
-        to make an experiment reproducible.
+        NumPy 随机数生成器。传入 ``np.random.default_rng(seed)`` 可确保实验可复现。
     horizontal_only:
-        If true, force the z component of the noise to zero.  This is useful
-        for ground vehicles.
+        为真时强制噪声的 z 分量为零，适用于地面车辆。
     """
     standard_deviation = np.asarray(std_m, dtype=np.float64)
 
@@ -135,13 +123,13 @@ def sample_mobility_noise(
     elif standard_deviation.shape == (3,):
         standard_deviation = standard_deviation.copy()
     else:
-        raise ValueError("std_m must be a scalar or have shape (3,)")
+        raise ValueError("std_m 必须是标量或形状为 (3,) 的向量")
 
     if (
         not np.all(np.isfinite(standard_deviation))
         or np.any(standard_deviation < 0.0)
     ):
-        raise ValueError("std_m must contain finite, non-negative values")
+        raise ValueError("std_m 必须只包含非负有限数值")
 
     if horizontal_only:
         standard_deviation[2] = 0.0
@@ -158,7 +146,7 @@ def clip_position_to_area(
     position_m: ArrayLike,
     bounds: SimulationBounds,
 ) -> Vector3:
-    """Clip a three-dimensional position to the simulation region."""
+    """将三维位置截断到仿真区域内。"""
     position = _as_vector3("position_m", position_m)
     return np.clip(
         position,
@@ -175,15 +163,14 @@ def update_position(
     noise_m: ArrayLike | None = None,
     bounds: SimulationBounds | None = None,
 ) -> Vector3:
-    """Apply the common position-update rule in equations (4) and (5).
+    """应用公式（4）和（5）共用的位置更新规则。
 
-    The implemented equation is:
+    实现的公式为：
 
         next_position = position + velocity * time_step + noise
 
-    This function is intentionally independent of node type.  Use
-    :func:`update_vehicle_position` or :func:`update_uav_position` when the
-    ground-plane or UAV-specific behavior is required.
+    本函数与节点类型无关。需要地面约束或无人机专用行为时，请使用
+    :func:`update_vehicle_position` 或 :func:`update_uav_position`。
     """
     position = _as_vector3("position_m", position_m)
     velocity = _as_vector3("velocity_mps", velocity_mps)
@@ -209,16 +196,15 @@ def update_vehicle_position(
     noise_m: ArrayLike | None = None,
     bounds: SimulationBounds | None = None,
 ) -> MobilityState:
-    """Advance a ground vehicle by one time slot using equation (4).
+    """按照公式（4）将地面车辆推进一个时隙。
 
-    The vehicle's z-position and vertical velocity are always forced to zero,
-    even if a non-zero z component is accidentally supplied in the state or
-    noise vector.
+    即使状态或噪声向量误传了非零 z 分量，车辆的 z 坐标和垂直速度也始终
+    强制为零。
     """
     if bounds is not None and not (
         bounds.minimum_m[2] <= 0.0 <= bounds.maximum_m[2]
     ):
-        raise ValueError("vehicle bounds must include the ground plane z = 0")
+        raise ValueError("车辆活动边界必须包含地面平面 z = 0")
 
     position = state.position_m.copy()
     velocity = state.velocity_mps.copy()
@@ -253,7 +239,7 @@ def update_uav_position(
     noise_m: ArrayLike | None = None,
     bounds: SimulationBounds | None = None,
 ) -> MobilityState:
-    """Advance a UAV by one time slot in 3D using equation (5)."""
+    """按照公式（5）在三维空间中将无人机推进一个时隙。"""
     next_position = update_position(
         state.position_m,
         state.velocity_mps,

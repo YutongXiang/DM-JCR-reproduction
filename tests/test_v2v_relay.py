@@ -14,7 +14,7 @@ from dm_jcr.v2v_relay import (
 
 @pytest.fixture
 def task() -> V2VTask:
-    """A 100 KB V2V message with a 0.1-second deadline."""
+    """一个时限为 0.1 秒的 100 KB 车车消息。"""
     return V2VTask(
         data_bits=kilobytes_to_bits(100.0),
         max_latency_s=0.1,
@@ -23,7 +23,7 @@ def task() -> V2VTask:
 
 @pytest.fixture
 def resources() -> V2VRelayResources:
-    """Resources chosen to make every term easy to calculate by hand."""
+    """选择便于手工计算每一项的资源数值。"""
     return V2VRelayResources(
         source_to_uav_rate_bps=20.0e6,
         uav_to_destination_rate_bps=40.0e6,

@@ -12,28 +12,27 @@ from typing import Iterable
 
 
 def _finite_non_negative(name: str, value: float) -> float:
-    """Return a finite float constrained to ``value >= 0``."""
+    """返回满足 ``value >= 0`` 的有限浮点数。"""
     value = float(value)
     if not isfinite(value) or value < 0.0:
-        raise ValueError(f"{name} must be finite and non-negative")
+        raise ValueError(f"{name} 必须为非负有限数值")
     return value
 
 
 def _finite_positive(name: str, value: float) -> float:
-    """Return a finite float constrained to ``value > 0``."""
+    """返回满足 ``value > 0`` 的有限浮点数。"""
     value = float(value)
     if not isfinite(value) or value <= 0.0:
-        raise ValueError(f"{name} must be finite and greater than 0")
+        raise ValueError(f"{name} 必须为大于 0 的有限数值")
     return value
 
 
 @dataclass(frozen=True)
 class UtilityWeights:
-    r"""Weights :math:`\psi_1,\ldots,\psi_5` in equation (9).
+    r"""公式（9）中的权重 :math:`\psi_1,\ldots,\psi_5`。
 
-    The paper does not require these five values to sum to one.  Their scale
-    controls the relative importance of link quality, current resource load
-    and deadline risk.
+    论文未要求五个权重之和为一；其大小控制链路质量、当前资源负载和时限风险
+    的相对重要程度。
     """
 
     link_quality: float = 1.0
@@ -58,17 +57,15 @@ class UtilityWeights:
             )
 
         if all(getattr(self, name) == 0.0 for name in names):
-            raise ValueError("at least one utility weight must be positive")
+            raise ValueError("至少一个效用权重必须为正数")
 
 
 @dataclass(frozen=True)
 class NodeCandidateState:
-    """Information needed to evaluate one candidate UAV or RSU.
+    """评价一个候选无人机或路侧单元所需的信息。
 
-    ``estimated_*_load`` is the load expected after accepting the task.
-    Values larger than the corresponding maximum are allowed here and receive
-    a penalty larger than one.  Hard feasibility constraints will be enforced
-    later when equation (17) is implemented.
+    ``estimated_*_load`` 表示接收任务后的预期负载。此处允许数值超过对应上限，
+    并给予大于一的惩罚；公式（17）会进一步执行硬可行性约束。
     """
 
     node_id: str
@@ -88,7 +85,7 @@ class NodeCandidateState:
 
     def __post_init__(self) -> None:
         if not isinstance(self.node_id, str) or not self.node_id.strip():
-            raise ValueError("node_id must be a non-empty string")
+            raise ValueError("node_id 必须是非空字符串")
         object.__setattr__(self, "node_id", self.node_id.strip())
 
         non_negative = (
@@ -121,7 +118,7 @@ class NodeCandidateState:
 
 @dataclass(frozen=True)
 class UtilityBreakdown:
-    """Reward and penalty terms that compose equation (9)."""
+    """组成公式（9）的奖励项与惩罚项。"""
 
     link_quality_reward: float
     cpu_load_penalty: float
@@ -133,7 +130,7 @@ class UtilityBreakdown:
 
 @dataclass(frozen=True)
 class OffloadingDecision:
-    """Result of equations (10), (11), optionally with hysteresis."""
+    """公式（10）和（11）的结果，可选用迟滞机制。"""
 
     selected_node_id: str
     selected_utility: float
@@ -147,9 +144,9 @@ def calculate_node_utility(
     candidate: NodeCandidateState,
     weights: UtilityWeights,
 ) -> UtilityBreakdown:
-    r"""Calculate equation (9) for one task-node candidate pair.
+    r"""为一个任务—候选节点对计算公式（9）。
 
-    The implemented utility is
+    实现的效用函数为
 
     .. math::
 
@@ -159,9 +156,8 @@ def calculate_node_utility(
            -\psi_4 L_{pw}/P^{max}
            -\psi_5 \max(0, \hat T-T^{max})/T^{max}.
 
-    ``math.log1p`` is the natural logarithm.  The paper writes ``log`` without
-    specifying its base; changing the base only rescales the first term and
-    can therefore be absorbed into :math:`\psi_1`.
+    ``math.log1p`` 使用自然对数。论文中的 ``log`` 未注明底数；改变底数只会
+    缩放第一项，因此可吸收到 :math:`\psi_1` 中。
     """
     link_quality_reward = weights.link_quality * log1p(candidate.snr)
     cpu_load_penalty = weights.cpu_load * (
@@ -204,14 +200,14 @@ def calculate_node_utility(
 def _candidate_tuple(
     candidates: Iterable[NodeCandidateState],
 ) -> tuple[NodeCandidateState, ...]:
-    """Materialize candidates and reject empty or duplicate node IDs."""
+    """将候选节点具体化，并拒绝空列表或重复节点标识。"""
     result = tuple(candidates)
     if not result:
-        raise ValueError("at least one candidate node is required")
+        raise ValueError("至少需要一个候选节点")
 
     node_ids = [candidate.node_id for candidate in result]
     if len(set(node_ids)) != len(node_ids):
-        raise ValueError("candidate node IDs must be unique")
+        raise ValueError("候选节点标识必须唯一")
     return result
 
 
@@ -219,7 +215,7 @@ def calculate_all_utilities(
     candidates: Iterable[NodeCandidateState],
     weights: UtilityWeights,
 ) -> dict[str, float]:
-    """Calculate equation (9) for every candidate in input order."""
+    """按输入顺序为每个候选节点计算公式（9）。"""
     candidate_tuple = _candidate_tuple(candidates)
     return {
         candidate.node_id: calculate_node_utility(
@@ -234,14 +230,14 @@ def build_assignment_indicators(
     candidate_node_ids: Iterable[str],
     selected_node_id: str,
 ) -> dict[str, int]:
-    """Build the binary indicators in equation (11)."""
+    """构造公式（11）中的二进制指示变量。"""
     node_ids = tuple(candidate_node_ids)
     if not node_ids:
-        raise ValueError("at least one candidate node ID is required")
+        raise ValueError("至少需要一个候选节点标识")
     if len(set(node_ids)) != len(node_ids):
-        raise ValueError("candidate node IDs must be unique")
+        raise ValueError("候选节点标识必须唯一")
     if selected_node_id not in node_ids:
-        raise ValueError("selected_node_id must be one of the candidates")
+        raise ValueError("selected_node_id 必须属于候选节点")
 
     return {
         node_id: int(node_id == selected_node_id)
@@ -253,10 +249,9 @@ def select_offloading_node(
     candidates: Iterable[NodeCandidateState],
     weights: UtilityWeights,
 ) -> OffloadingDecision:
-    """Select the maximum-utility node in equation (10).
+    """按照公式（10）选择效用最大的节点。
 
-    If multiple candidates have exactly the same utility, the first candidate
-    in the supplied order is selected.  This makes tie handling deterministic.
+    多个候选节点效用完全相同时，选择输入顺序中的第一个，使平局处理具有确定性。
     """
     candidate_tuple = _candidate_tuple(candidates)
     utilities = calculate_all_utilities(candidate_tuple, weights)
@@ -281,11 +276,10 @@ def select_node_with_hysteresis(
     previous_node_id: str | None,
     switching_threshold: float,
 ) -> OffloadingDecision:
-    """Apply the paper's task-level hysteresis after equations (9)-(11).
+    """在公式（9）至（11）之后应用论文的任务级迟滞机制。
 
-    A task changes nodes only when the new best utility exceeds the previous
-    node's utility by strictly more than ``switching_threshold``.  If the old
-    node is no longer a candidate, the current best node is selected directly.
+    只有新最优效用严格超过原节点效用 ``switching_threshold`` 以上时，任务才会
+    切换节点。若原节点已不在候选集中，则直接选择当前最优节点。
     """
     threshold = _finite_non_negative(
         "switching_threshold",

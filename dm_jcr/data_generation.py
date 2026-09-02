@@ -829,7 +829,7 @@ def generate_and_save_dataset(
         "environment_width": None,
         "strategy_shape": [strategy_spec.max_tasks, strategy_spec.score_width],
         "splits": {},
-        "label_semantics": "best candidate found; not certified global optimum",
+        "label_semantics": "搜索得到的最佳候选策略，不保证是全局最优解",
     }
     for split_index, split in enumerate(("train", "validation", "test")):
         size = int(split_sizes[split])

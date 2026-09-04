@@ -27,10 +27,11 @@ from dm_jcr.diffusion import (
     diffusion_spec_from_config,
 )
 from dm_jcr.diffusion_objective import (
+    compact_strategy_slot_mask,
+    expand_compact_strategy,
     ObjectiveTensorSpec,
     evaluate_strategy_tensor,
     objective_tensor_spec_from_config,
-    strategy_slot_mask,
 )
 
 
@@ -229,7 +230,9 @@ def train_strategy_autoencoder(
         count = 0
         for batch_features, batch_mask in loader:
             batch_features, batch_mask = batch_features.to(device), batch_mask.to(device)
-            slot_mask = strategy_slot_mask(batch_features, batch_mask).flatten(1)
+            slot_mask = compact_strategy_slot_mask(
+                batch_mask, model_spec.strategy_fields
+            ).flatten(1)
             random_strategy = torch.rand(
                 slot_mask.shape,
                 generator=generator,
@@ -284,13 +287,15 @@ def train_diffusion_model(
             tasks, indices, task_mask = tasks.to(device), indices.to(device), task_mask.to(device)
             model_tasks = tasks[:, : bundle.model_spec.model_max_tasks]
             model_mask = task_mask[:, : bundle.model_spec.model_max_tasks]
-            slots = strategy_slot_mask(model_tasks, model_mask)
+            compact_slots = compact_strategy_slot_mask(
+                model_mask, bundle.model_spec.strategy_fields
+            )
             random_strategy = torch.rand(
                 (tasks.shape[0], bundle.model_spec.strategy_width),
                 generator=generator,
                 device=device,
             ) * (high - low) + low
-            random_strategy = random_strategy * slots.flatten(1)
+            random_strategy = random_strategy * compact_slots.flatten(1)
             with torch.no_grad():
                 clean_high = bundle.autoencoder.expand(random_strategy)
             noise = torch.randn(
@@ -308,7 +313,12 @@ def train_diffusion_model(
                 gradient_checkpointing=training_spec.gradient_checkpointing,
             )
             reduced = nn.functional.softplus(bundle.autoencoder.reduce(denoised))
-            scores = reduced.reshape(-1, bundle.model_spec.model_max_tasks, 8) * slots
+            compact_scores = reduced.reshape(
+                -1,
+                bundle.model_spec.model_max_tasks,
+                bundle.model_spec.strategy_fields,
+            ) * compact_slots
+            scores = expand_compact_strategy(compact_scores, model_tasks, model_mask)
             objective = evaluate_strategy_tensor(
                 scores,
                 nodes,
@@ -355,7 +365,7 @@ def generate_resource_strategy(
     bundle.autoencoder.eval()
     bundle.diffusion.eval()
     categories = bundle.classifier(normalized).argmax(dim=1)
-    slots = strategy_slot_mask(features, masks)
+    compact_slots = compact_strategy_slot_mask(masks, bundle.model_spec.strategy_fields)
     generator = torch.Generator(device=device).manual_seed(random_seed)
     low, high = bundle.model_spec.random_strategy_range
     random_strategy = torch.rand(
@@ -363,7 +373,7 @@ def generate_resource_strategy(
         generator=generator,
         device=device,
     ) * (high - low) + low
-    random_strategy = random_strategy * slots.flatten(1)
+    random_strategy = random_strategy * compact_slots.flatten(1)
     clean_high = bundle.autoencoder.expand(random_strategy)
     noise = torch.randn(
         clean_high.shape, generator=generator, device=device, dtype=clean_high.dtype
@@ -372,7 +382,12 @@ def generate_resource_strategy(
     noisy = bundle.diffusion.add_noise(clean_high, noise, timestep)
     denoised = bundle.diffusion.sample(noisy, categories, steps=steps)
     low_strategy = nn.functional.softplus(bundle.autoencoder.reduce(denoised))
-    low_strategy = low_strategy.reshape(-1, bundle.model_spec.model_max_tasks, 8) * slots
+    compact_strategy = low_strategy.reshape(
+        -1,
+        bundle.model_spec.model_max_tasks,
+        bundle.model_spec.strategy_fields,
+    ) * compact_slots
+    low_strategy = expand_compact_strategy(compact_strategy, features, masks)
     output = np.zeros((environment.shape[0], task_features.shape[1], 8), dtype=np.float32)
     output[:, : bundle.model_spec.model_max_tasks] = low_strategy.cpu().numpy()
     return output

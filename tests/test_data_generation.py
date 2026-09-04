@@ -1,5 +1,6 @@
 """验证环境、标签策略和数据集划分的一体化生成流程。"""
 
+from dataclasses import replace
 import json
 
 import numpy as np
@@ -51,6 +52,22 @@ def test_generated_scenario_contains_all_task_modes_and_valid_relations() -> Non
     encoded = encode_environment(scenario.snapshot, tensor_spec_from_config(config))
     assert encoded.task_mask.sum() == scenario.task_count
     assert np.all(np.isfinite(encoded.flat_vector()))
+
+
+def test_generator_supports_more_tasks_than_vehicles() -> None:
+    config = load_config()
+    spec = scenario_spec_from_config(config)
+    fixed = replace(
+        spec,
+        vehicle_count_range=(4, 4),
+        task_count_range=(150, 150),
+    )
+
+    scenario = generate_scenario(np.random.default_rng(17), 0, fixed)
+
+    assert len(scenario.snapshot.nodes) >= 4
+    assert scenario.task_count == 150
+    assert len({task.source_vehicle_id for task in scenario.snapshot.tasks}) <= 4
 
 
 def test_strategy_search_returns_candidate_not_worse_than_baseline() -> None:

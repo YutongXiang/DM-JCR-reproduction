@@ -16,6 +16,8 @@ from dm_jcr.diffusion import (
     diffusion_spec_from_config,
 )
 from dm_jcr.diffusion_objective import (
+    compact_strategy_slot_mask,
+    expand_compact_strategy,
     evaluate_strategy_tensor,
     objective_tensor_spec_from_config,
 )
@@ -97,6 +99,44 @@ def test_paper_networks_have_expected_shapes() -> None:
     assert autoencoder.reduce(image).shape == low.shape
     probabilities = classifier.probabilities(torch.randn(2, 12))
     torch.testing.assert_close(probabilities.sum(dim=1), torch.ones(2))
+
+
+def test_default_compact_strategy_fits_150_tasks_in_28_by_28() -> None:
+    spec = diffusion_spec_from_config(load_config())
+
+    assert spec.model_max_tasks == 150
+    assert spec.strategy_fields == 4
+    assert spec.strategy_width == 600
+    assert spec.high_dimension == 784
+
+
+def test_compact_strategy_expands_to_canonical_slots_and_keeps_gradients() -> None:
+    compact = torch.tensor(
+        [[[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0], [9.0, 10.0, 11.0, 12.0]]],
+        requires_grad=True,
+    )
+    features = torch.zeros((1, 3, 7))
+    features[0, 0, 4] = 1.0  # 直接计算
+    features[0, 1, 5] = 1.0  # UAV 中继计算
+    features[0, 2, 6] = 1.0  # V2V 转发
+    mask = torch.ones((1, 3), dtype=torch.bool)
+
+    expanded = expand_compact_strategy(compact, features, mask)
+
+    torch.testing.assert_close(
+        expanded,
+        torch.tensor(
+            [[
+                [1.0, 0.0, 0.0, 0.0, 3.0, 0.0, 4.0, 0.0],
+                [5.0, 5.0, 6.0, 6.0, 7.0, 7.0, 8.0, 8.0],
+                [9.0, 0.0, 0.0, 10.0, 11.0, 0.0, 12.0, 0.0],
+            ]]
+        ),
+    )
+    assert compact_strategy_slot_mask(mask).shape == compact.shape
+    expanded.sum().backward()
+    assert compact.grad is not None
+    assert torch.all(torch.isfinite(compact.grad))
 
 
 def test_differentiable_objective_matches_existing_equation_17_evaluator() -> None:

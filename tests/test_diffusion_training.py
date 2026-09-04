@@ -24,7 +24,7 @@ from dm_jcr.diffusion_training import (
 )
 
 
-def _bundle(environment_width: int) -> DMJCRBundle:
+def _bundle(environment_width: int, model_max_tasks: int = 3) -> DMJCRBundle:
     config = load_config()
     spec = replace(
         diffusion_spec_from_config(config),
@@ -33,7 +33,7 @@ def _bundle(environment_width: int) -> DMJCRBundle:
         environment_categories=2,
         classifier_hidden_sizes=(8, 4),
         autoencoder_hidden_sizes=(16, 32),
-        model_max_tasks=3,
+        model_max_tasks=model_max_tasks,
         time_embedding_size=8,
     )
     preprocessor = EnvironmentPreprocessor(
@@ -92,3 +92,26 @@ def test_checkpoint_round_trip_and_inference_mask(tmp_path) -> None:
     np.testing.assert_array_equal(strategy[0, 0] > 0, [1, 0, 0, 0, 1, 0, 1, 0])
     np.testing.assert_array_equal(strategy[0, 1] > 0, [1, 0, 0, 1, 1, 0, 1, 0])
     np.testing.assert_array_equal(strategy[0, 2:], 0.0)
+
+
+def test_inference_supports_150_compact_tasks() -> None:
+    bundle = _bundle(5, model_max_tasks=150)
+    environment = np.zeros((1, 5), dtype=np.float64)
+    task_features = np.zeros((1, 150, 7), dtype=np.float64)
+    task_mask = np.ones((1, 150), dtype=np.bool_)
+    for index in range(150):
+        task_features[0, index, 4 + index % 3] = 1.0
+
+    strategy = generate_resource_strategy(
+        bundle,
+        environment,
+        task_features,
+        task_mask,
+        torch.device("cpu"),
+        random_seed=5,
+        denoising_steps=1,
+    )
+
+    assert strategy.shape == (1, 150, 8)
+    assert np.all(np.isfinite(strategy))
+    assert np.all(strategy >= 0.0)

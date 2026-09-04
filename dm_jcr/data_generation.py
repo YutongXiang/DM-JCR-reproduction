@@ -139,8 +139,6 @@ class ScenarioGenerationSpec:
             raise ValueError("生成 V2V 任务至少需要两辆车")
         if self.uav_count_range[0] < 1 or self.rsu_count_range[0] < 1:
             raise ValueError("生成器至少需要一个 UAV 和一个 RSU")
-        if self.task_count_range[1] > self.vehicle_count_range[1]:
-            raise ValueError("任务上限不能超过车辆上限，以保证每辆源车至多一个任务")
         if self.remaining_resource_fraction_range[1] > 1.0:
             raise ValueError("remaining_resource_fraction_range 不能超过 1")
         if self.ensure_all_task_modes and self.task_count_range[0] < 3:
@@ -462,8 +460,11 @@ def generate_scenario(
     uavs = tuple(node for node in nodes if node.node_type == "uav")
     rsus = tuple(node for node in nodes if node.node_type == "rsu")
     compute_nodes = (*uavs, *rsus)
-    task_count = min(_count(rng, spec.task_count_range), len(vehicles))
-    sources = tuple(rng.choice(vehicles, size=task_count, replace=False))
+    task_count = _count(rng, spec.task_count_range)
+    # 论文的实验任务数可高于车辆数，因此允许同一车辆在一个时隙产生多个任务。
+    sources = tuple(
+        rng.choice(vehicles, size=task_count, replace=task_count > len(vehicles))
+    )
     modes = _task_modes(rng, task_count, spec)
     assigned_count = {node.node_id: 0 for node in compute_nodes}
 

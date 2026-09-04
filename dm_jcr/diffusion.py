@@ -43,8 +43,10 @@ class DiffusionModelSpec:
             raise ValueError("environment_categories 必须大于 1")
         if not 0.0 <= self.classifier_dropout < 1.0:
             raise ValueError("classifier_dropout 必须位于 [0, 1)")
+        if self.strategy_fields != 4:
+            raise ValueError("当前紧凑策略编码要求每个任务包含四个字段")
         if self.strategy_width > self.high_dimension:
-            raise ValueError("论文要求先升维，因此低维策略宽度不能超过 28×28")
+            raise ValueError("紧凑策略宽度不能超过论文 28×28 单通道表示的容量")
         if self.time_embedding_size <= 0 or self.time_embedding_size % 2 != 0:
             raise ValueError("time_embedding_size 必须是正偶数")
         if self.loss_delta <= 0.0:
@@ -102,7 +104,7 @@ def diffusion_spec_from_config(config: dict[str, Any]) -> DiffusionModelSpec:
         classifier_dropout=assumed["classifier_dropout"],
         autoencoder_hidden_sizes=tuple(assumed["autoencoder_hidden_sizes"]),
         model_max_tasks=assumed["model_max_tasks"],
-        strategy_fields=8,
+        strategy_fields=assumed["model_strategy_fields"],
         time_embedding_size=assumed["time_embedding_size"],
         loss_delta=assumed["loss_delta"],
         random_strategy_range=tuple(assumed["random_strategy_range"]),

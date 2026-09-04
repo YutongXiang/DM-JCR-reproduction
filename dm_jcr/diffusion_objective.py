@@ -85,6 +85,51 @@ def strategy_slot_mask(task_features: Tensor, task_mask: Tensor) -> Tensor:
     return result
 
 
+def compact_strategy_slot_mask(task_mask: Tensor, fields: int = 4) -> Tensor:
+    """返回模型内部紧凑策略的有效槽位；每个有效任务使用四个字段。"""
+
+    if fields != 4:
+        raise ValueError("当前紧凑策略编码要求 fields=4")
+    if task_mask.ndim != 2:
+        raise ValueError("task_mask 必须具有形状 (batch, tasks)")
+    return task_mask.bool().unsqueeze(-1).expand(*task_mask.shape, fields)
+
+
+def expand_compact_strategy(
+    compact_scores: Tensor,
+    task_features: Tensor,
+    task_mask: Tensor,
+) -> Tensor:
+    """将每任务四个紧凑分数按任务模式可微展开为标准八槽位策略。"""
+
+    if compact_scores.ndim != 3 or compact_scores.shape[-1] != 4:
+        raise ValueError("compact_scores 必须具有形状 (batch, tasks, 4)")
+    if task_features.shape[:2] != compact_scores.shape[:2]:
+        raise ValueError("task_features 的 batch 和 tasks 维必须与 compact_scores 一致")
+    if task_mask.shape != compact_scores.shape[:2]:
+        raise ValueError("task_mask 必须具有形状 (batch, tasks)")
+
+    valid = task_mask.to(dtype=compact_scores.dtype)
+    direct = task_features[..., 4].to(dtype=compact_scores.dtype) * valid
+    relay = task_features[..., 5].to(dtype=compact_scores.dtype) * valid
+    v2v = task_features[..., 6].to(dtype=compact_scores.dtype) * valid
+    active = direct + relay + v2v
+    forward_bandwidth, return_bandwidth, cpu, power = compact_scores.unbind(-1)
+    return torch.stack(
+        (
+            forward_bandwidth * active,
+            forward_bandwidth * relay,
+            return_bandwidth * relay,
+            return_bandwidth * (relay + v2v),
+            cpu * active,
+            cpu * relay,
+            power * active,
+            power * relay,
+        ),
+        dim=-1,
+    )
+
+
 def _gather_nodes(values: Tensor, indices: Tensor) -> Tensor:
     safe = indices.clamp(min=0)
     return torch.gather(values, 1, safe.unsqueeze(-1).expand(-1, -1, values.shape[-1]))
@@ -358,7 +403,9 @@ def evaluate_strategy_tensor(
 
 
 __all__ = [
+    "compact_strategy_slot_mask",
     "DifferentiableObjective",
+    "expand_compact_strategy",
     "ObjectiveTensorSpec",
     "evaluate_strategy_tensor",
     "objective_tensor_spec_from_config",

@@ -94,7 +94,8 @@ channel_gain_scale = 1.0e-7
 vehicle_count_range = [4, 8]
 uav_count_range = [2, 3]
 rsu_count_range = [1, 2]
-task_count_range = [3, 6]
+# 为论文图 5—7覆盖 10—150 个任务；任务数可超过车辆数，同一车辆可产生多个任务。
+task_count_range = [10, 150]
 area_size_m = [1000.0, 1000.0]
 uav_altitude_range_m = [50.0, 150.0]
 vehicle_speed_range_mps = [5.0, 20.0]
@@ -125,7 +126,8 @@ log_score_std = 1.0
 minimum_score = 0.05
 maximum_score = 20.0
 deadline_violation_penalty = 2.0
-require_feasible_label = true
+# 高负载趋势实验允许出现截止期违约；否则接近150个任务时通常无法生成样本。
+require_feasible_label = false
 maximum_scenario_attempts = 20
 
 [assumptions.diffusion]
@@ -138,8 +140,11 @@ environment_preprocessing = "per_feature_standardization"
 kmeans_n_init = 10
 classifier_hidden_sizes = [256, 128]
 classifier_dropout = 0.2
-autoencoder_hidden_sizes = [256, 512]
-model_max_tasks = 6
+# 论文未公开资源策略到 28×28 矩阵的编码。这里采用每任务四个紧凑分数：
+# 正向带宽、返回带宽、CPU、功率；评价前再按任务模式展开为原有八槽位。
+autoencoder_hidden_sizes = [768, 768]
+model_max_tasks = 150
+model_strategy_fields = 4
 time_embedding_size = 128
 condition_injection = "time_and_class_embedding_added_per_unet_block"
 positive_output_transform = "softplus"

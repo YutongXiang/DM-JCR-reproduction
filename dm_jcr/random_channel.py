@@ -242,6 +242,7 @@ def sample_random_channel(
         30.0,
     ),
     link_available: bool = True,
+    forced_blocked: bool | None = None,
 ) -> ChannelSample:
     """
     完整采样论文公式 (7)。
@@ -254,9 +255,15 @@ def sample_random_channel(
         node_position,
     )
 
-    blocked = sample_blockage(
-        rng=rng,
-        blockage_probability=blockage_probability,
+    if forced_blocked is not None and not isinstance(forced_blocked, (bool, np.bool_)):
+        raise TypeError("forced_blocked 必须是布尔值或 None")
+    blocked = (
+        bool(forced_blocked)
+        if forced_blocked is not None
+        else sample_blockage(
+            rng=rng,
+            blockage_probability=blockage_probability,
+        )
     )
 
     shadow_factor = sample_shadow_factor(
@@ -326,6 +333,7 @@ def sample_wireless_link(
         30.0,
     ),
     link_available: bool = True,
+    forced_blocked: bool | None = None,
 ) -> WirelessLinkSample:
     """
     完整计算随机信道和传输速率。
@@ -351,6 +359,7 @@ def sample_wireless_link(
             blocked_loss_range_db
         ),
         link_available=link_available,
+        forced_blocked=forced_blocked,
     )
 
     sinr = calculate_sinr(

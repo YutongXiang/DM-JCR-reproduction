@@ -830,14 +830,20 @@ def verify_equation17_resource_constraints(
     strategy: Equation17ProjectedStrategy,
     capacities: Iterable[NodeResourceCapacity],
     *, tolerance: float = 1e-8,
+    relative_tolerance: float = 1e-12,
 ) -> bool:
     tolerance = _finite_non_negative("tolerance", tolerance)
+    relative_tolerance = _finite_non_negative("relative_tolerance", relative_tolerance)
     cap = _index_capacities(capacities)
     for node, values in equation17_resource_totals(strategy).items():
         if node not in cap:
             return False
         limits = (cap[node].total_bandwidth_hz, cap[node].total_cpu_frequency_hz, cap[node].total_transmit_power_w)
-        if any(value < -tolerance or value - limit > tolerance for value, limit in zip(values, limits)):
+        if any(
+            value < -tolerance
+            or value - limit > max(tolerance, relative_tolerance * limit)
+            for value, limit in zip(values, limits)
+        ):
             return False
     return True
 

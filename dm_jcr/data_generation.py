@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+import hashlib
 import json
 from math import pi
 from pathlib import Path
@@ -98,6 +99,9 @@ class ScenarioGenerationSpec:
     uav_count_range: tuple[int, int]
     rsu_count_range: tuple[int, int]
     task_count_range: tuple[int, int]
+    tasks_per_uav: int
+    tasks_per_rsu: int
+    cpu_admission_utilization: float
     area_size_m: tuple[float, float]
     uav_altitude_range_m: tuple[float, float]
     vehicle_speed_range_mps: tuple[float, float]
@@ -143,6 +147,10 @@ class ScenarioGenerationSpec:
             raise ValueError("remaining_resource_fraction_range 不能超过 1")
         if self.ensure_all_task_modes and self.task_count_range[0] < 3:
             raise ValueError("确保三类任务时，任务数量下限至少为 3")
+        if self.tasks_per_uav <= 0 or self.tasks_per_rsu <= 0:
+            raise ValueError("tasks_per_uav 和 tasks_per_rsu 必须为正整数")
+        if not 0.0 < self.cpu_admission_utilization <= 1.0:
+            raise ValueError("cpu_admission_utilization 必须位于 (0, 1]")
         for name in (
             "vehicle_transmit_power_w",
             "forwarding_cycles_per_bit",
@@ -219,6 +227,9 @@ class DiffusionSample:
     penalized_objective: float
     baseline_objective: float
     baseline_penalized_objective: float
+    resource_feasible: bool
+    deadline_feasible: bool
+    deadline_satisfied_ratio: float
     feasible: bool
     evaluated_candidates: int
 
@@ -247,6 +258,9 @@ def scenario_spec_from_config(config: Mapping[str, Any]) -> ScenarioGenerationSp
         uav_count_range=_int_pair("uav_count_range", values["uav_count_range"]),
         rsu_count_range=_int_pair("rsu_count_range", values["rsu_count_range"]),
         task_count_range=_int_pair("task_count_range", values["task_count_range"]),
+        tasks_per_uav=int(values["tasks_per_uav"]),
+        tasks_per_rsu=int(values["tasks_per_rsu"]),
+        cpu_admission_utilization=float(values["cpu_admission_utilization"]),
         area_size_m=_positive_vector2("area_size_m", values["area_size_m"]),
         uav_altitude_range_m=_float_pair("uav_altitude_range_m", values["uav_altitude_range_m"], positive=True),
         vehicle_speed_range_mps=_float_pair("vehicle_speed_range_mps", values["vehicle_speed_range_mps"]),
@@ -321,14 +335,19 @@ def _antenna_gain(node: EnvironmentNode, spec: ScenarioGenerationSpec) -> float:
 def _sample_nodes(
     rng: np.random.Generator,
     spec: ScenarioGenerationSpec,
+    task_count: int,
 ) -> tuple[tuple[EnvironmentNode, ...], tuple[NodeResourceCapacity, ...]]:
     width, height = spec.area_size_m
     nodes: list[EnvironmentNode] = []
     capacities: list[NodeResourceCapacity] = []
+    sampled_uavs = _count(rng, spec.uav_count_range)
+    sampled_rsus = _count(rng, spec.rsu_count_range)
+    required_uavs = int(np.ceil(task_count / spec.tasks_per_uav))
+    required_rsus = int(np.ceil(task_count / spec.tasks_per_rsu))
     counts = {
         "vehicle": _count(rng, spec.vehicle_count_range),
-        "uav": _count(rng, spec.uav_count_range),
-        "rsu": _count(rng, spec.rsu_count_range),
+        "uav": min(spec.uav_count_range[1], max(sampled_uavs, required_uavs)),
+        "rsu": min(spec.rsu_count_range[1], max(sampled_rsus, required_rsus)),
     }
     for node_type in ("vehicle", "uav", "rsu"):
         for index in range(counts[node_type]):
@@ -401,6 +420,7 @@ def _candidate_state(
     node: EnvironmentNode,
     channel_gain: float,
     assigned_count: int,
+    reserved_cpu_hz: float,
     spec: ScenarioGenerationSpec,
 ) -> NodeCandidateState:
     snr = calculate_sinr(
@@ -411,7 +431,7 @@ def _candidate_state(
     )
     share = assigned_count + 1
     bandwidth_load = min(node.remaining_bandwidth_hz * 1.5, share * spec.nominal_bandwidth_hz)
-    cpu_load = min(node.remaining_cpu_frequency_hz * 1.5, share * task.cpu_cycles / task.max_latency_s)
+    cpu_load = reserved_cpu_hz + task.cpu_cycles / task.max_latency_s
     power_load = min(node.remaining_transmit_power_w * 1.5, share * node.remaining_transmit_power_w / 4.0)
     rate = spec.nominal_bandwidth_hz * np.log2(1.0 + snr)
     predicted_latency = task.input_bits / max(rate, np.finfo(float).tiny)
@@ -428,6 +448,22 @@ def _candidate_state(
         predicted_latency,
         task.max_latency_s,
     )
+
+
+def _select_capacity_aware_node(
+    candidates: tuple[NodeCandidateState, ...],
+    spec: ScenarioGenerationSpec,
+) -> str:
+    """优先在满足 CPU 准入余量的节点中执行论文的效用选择。"""
+
+    admitted = tuple(
+        candidate
+        for candidate in candidates
+        if candidate.estimated_cpu_load_hz
+        <= candidate.maximum_cpu_hz * spec.cpu_admission_utilization
+    )
+    pool = admitted or candidates
+    return select_offloading_node(pool, spec.offloading_weights).selected_node_id
 
 
 def _task_modes(
@@ -453,20 +489,21 @@ def generate_scenario(
 ) -> GeneratedScenario:
     """生成一个完整随机时隙，并构造三类公式（17）任务上下文。"""
 
-    nodes, capacities = _sample_nodes(rng, spec)
+    task_count = _count(rng, spec.task_count_range)
+    nodes, capacities = _sample_nodes(rng, spec, task_count)
     links, gains = _sample_links(rng, nodes, spec)
     node_by_id = {node.node_id: node for node in nodes}
     vehicles = tuple(node for node in nodes if node.node_type == "vehicle")
     uavs = tuple(node for node in nodes if node.node_type == "uav")
     rsus = tuple(node for node in nodes if node.node_type == "rsu")
     compute_nodes = (*uavs, *rsus)
-    task_count = _count(rng, spec.task_count_range)
     # 论文的实验任务数可高于车辆数，因此允许同一车辆在一个时隙产生多个任务。
     sources = tuple(
         rng.choice(vehicles, size=task_count, replace=task_count > len(vehicles))
     )
     modes = _task_modes(rng, task_count, spec)
     assigned_count = {node.node_id: 0 for node in compute_nodes}
+    reserved_cpu_hz = {node.node_id: 0.0 for node in compute_nodes}
 
     tasks: list[EnvironmentTask] = []
     mappings: list[TaskNodeMapping] = []
@@ -489,12 +526,14 @@ def generate_scenario(
                     node,
                     gains[(source.node_id, node.node_id)],
                     assigned_count[node.node_id],
+                    reserved_cpu_hz[node.node_id],
                     spec,
                 )
                 for node in compute_nodes
             )
-            selected_id = select_offloading_node(candidates, spec.offloading_weights).selected_node_id
+            selected_id = _select_capacity_aware_node(candidates, spec)
             assigned_count[selected_id] += 1
+            reserved_cpu_hz[selected_id] += cpu_cycles / deadline
             mappings.append(TaskNodeMapping(task_id, "direct", compute_node_id=selected_id))
             direct_contexts.append(
                 DirectTaskContext(
@@ -518,13 +557,18 @@ def generate_scenario(
                     node,
                     gains[(relay.node_id, node.node_id)],
                     assigned_count[node.node_id],
+                    reserved_cpu_hz[node.node_id],
                     spec,
                 )
                 for node in rsus
             )
-            compute_id = select_offloading_node(candidates, spec.offloading_weights).selected_node_id
+            compute_id = _select_capacity_aware_node(candidates, spec)
             assigned_count[relay.node_id] += 1
             assigned_count[compute_id] += 1
+            reserved_cpu_hz[compute_id] += cpu_cycles / deadline
+            reserved_cpu_hz[relay.node_id] += (
+                input_bits * (1.0 + output_ratio) * spec.forwarding_cycles_per_bit / deadline
+            )
             mappings.append(
                 TaskNodeMapping(
                     task_id,
@@ -556,6 +600,9 @@ def generate_scenario(
                 key=lambda node: gains[(source.node_id, node.node_id)] * gains[(node.node_id, target.node_id)],
             )
             assigned_count[relay.node_id] += 1
+            reserved_cpu_hz[relay.node_id] += (
+                input_bits * spec.forwarding_cycles_per_bit / deadline
+            )
             mappings.append(
                 TaskNodeMapping(
                     task_id,
@@ -629,6 +676,72 @@ def _candidate_strategy(
     return EncodedRawStrategy(values, mask, mappings)
 
 
+def _heuristic_strategy(
+    scenario: GeneratedScenario,
+    tensor_spec: StrategyTensorSpec,
+    search_spec: StrategySearchSpec,
+) -> EncodedRawStrategy:
+    """按任务在截止期内的资源需求构造候选搜索起点。"""
+
+    values = np.zeros((tensor_spec.max_tasks, tensor_spec.score_width))
+    mask = np.zeros(tensor_spec.max_tasks, dtype=np.bool_)
+    tasks = {task.task_id: task for task in scenario.snapshot.tasks}
+    relay_forwarding = {
+        context.task_id: context.forwarding_cycles_per_bit
+        for context in scenario.relay_contexts
+    }
+    for index, mapping in enumerate(scenario.snapshot.mappings):
+        task = tasks[mapping.task_id]
+        mask[index] = True
+        input_rate = task.input_bits / task.max_latency_s
+        output_rate = task.input_bits * task.output_ratio / task.max_latency_s
+        compute_rate = task.cpu_cycles / task.max_latency_s
+        forward_rate = (
+            task.input_bits
+            * (1.0 + task.output_ratio)
+            * relay_forwarding.get(mapping.task_id, 0.0)
+            / task.max_latency_s
+        )
+        if mapping.mode == "direct":
+            values[index, (0, 4, 6)] = (
+                input_rate + output_rate,
+                compute_rate,
+                input_rate + output_rate,
+            )
+        elif mapping.mode == "relay_computation":
+            values[index] = (
+                input_rate,
+                input_rate,
+                output_rate,
+                output_rate,
+                forward_rate,
+                compute_rate,
+                input_rate + output_rate,
+                output_rate,
+            )
+        else:
+            values[index, (0, 3, 4, 6)] = (
+                input_rate,
+                input_rate,
+                compute_rate,
+                input_rate,
+            )
+
+    # 公式（27）只使用同类分数的相对比例。分别缩放带宽、CPU和功率分数，
+    # 防止物理单位的数量级差异被统一裁剪到 maximum_score。
+    for slots in (range(0, 4), range(4, 6), range(6, 8)):
+        view = values[:, slots]
+        positive = view[view > 0.0]
+        if positive.size:
+            view[view > 0.0] /= np.median(positive)
+            values[:, slots] = view
+    active = values > 0.0
+    values[active] = np.clip(
+        values[active], search_spec.minimum_score, search_spec.maximum_score
+    )
+    return EncodedRawStrategy(values, mask, scenario.snapshot.mappings)
+
+
 def _deadline_violations(evaluation: Equation17Evaluation) -> int:
     violations = sum(not item.metrics.meets_deadline for item in evaluation.direct_tasks)
     violations += sum(not item.metrics.deadline_satisfied for item in evaluation.relay_computation_tasks)
@@ -672,7 +785,7 @@ def search_high_quality_strategy(
     """搜索并返回不劣于全 1 基线的高质量公式（17）策略。"""
 
     mappings = scenario.snapshot.mappings
-    baseline = _candidate_strategy(rng, mappings, tensor_spec, search_spec, None)
+    baseline = _heuristic_strategy(scenario, tensor_spec, search_spec)
     baseline_evaluation, baseline_penalized = _evaluate_candidate(
         baseline,
         scenario,
@@ -749,6 +862,9 @@ def generate_diffusion_sample(
         result.penalized_objective,
         result.baseline_objective,
         result.baseline_penalized_objective,
+        result.evaluation.resource_constraints_satisfied,
+        result.evaluation.deadline_constraints_satisfied,
+        1.0 - _deadline_violations(result.evaluation) / scenario.task_count,
         result.evaluation.feasible,
         result.evaluated_candidates,
     )
@@ -781,6 +897,11 @@ def _dataset_arrays(samples: list[DiffusionSample]) -> dict[str, np.ndarray]:
         "baseline_objective": np.asarray([sample.baseline_objective for sample in samples]),
         "baseline_penalized_objective": np.asarray(
             [sample.baseline_penalized_objective for sample in samples]
+        ),
+        "resource_feasible": np.asarray([sample.resource_feasible for sample in samples]),
+        "deadline_feasible": np.asarray([sample.deadline_feasible for sample in samples]),
+        "deadline_satisfied_ratio": np.asarray(
+            [sample.deadline_satisfied_ratio for sample in samples]
         ),
         "feasible": np.asarray([sample.feasible for sample in samples]),
         "evaluated_candidates": np.asarray([sample.evaluated_candidates for sample in samples]),
@@ -824,7 +945,23 @@ def generate_and_save_dataset(
     seed_sequence = np.random.SeedSequence(random_seed)
     child_seeds = seed_sequence.spawn(3)
     manifest: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": 2,
+        "config_sha256": hashlib.sha256(
+            json.dumps(
+                {
+                    "paper": config["paper"],
+                    "assumptions": {
+                        name: config["assumptions"][name]
+                        for name in (
+                            "channel", "objective", "relay_accounting", "tensor",
+                            "dataset_generation", "strategy_search",
+                        )
+                    },
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest(),
         "random_seed": random_seed,
         "candidate_count": search_spec.candidate_count,
         "environment_width": None,
@@ -864,6 +1001,11 @@ def generate_and_save_dataset(
                 (arrays["baseline_penalized_objective"] - arrays["penalized_objective"]).mean()
             ),
             "feasible_ratio": float(arrays["feasible"].mean()),
+            "resource_feasible_ratio": float(arrays["resource_feasible"].mean()),
+            "deadline_feasible_ratio": float(arrays["deadline_feasible"].mean()),
+            "mean_task_deadline_satisfied_ratio": float(
+                arrays["deadline_satisfied_ratio"].mean()
+            ),
         }
     manifest_path = output / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")

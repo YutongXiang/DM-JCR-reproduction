@@ -124,6 +124,8 @@ def test_dataset_writer_creates_reproducible_disjoint_split_files(tmp_path) -> N
             np.testing.assert_array_equal(left["E"], right["E"])
             np.testing.assert_array_equal(left["x0"], right["x0"])
             assert np.all(left["penalized_objective"] >= left["objective"])
+            assert np.all(left["resource_feasible"])
+            assert np.all((0.0 <= left["deadline_satisfied_ratio"]) & (left["deadline_satisfied_ratio"] <= 1.0))
             assert np.all(
                 left["penalized_objective"] <= left["baseline_penalized_objective"]
             )

@@ -92,24 +92,33 @@ channel_gain_scale = 1.0e-7
 [assumptions.dataset_generation]
 # 论文没有公开训练数据生成程序，以下范围用于构造可重复的多场景样本。
 vehicle_count_range = [4, 8]
-uav_count_range = [2, 3]
-rsu_count_range = [1, 2]
-# 为论文图 5—7覆盖 10—150 个任务；任务数可超过车辆数，同一车辆可产生多个任务。
+uav_count_range = [2, 15]
+rsu_count_range = [1, 20]
+# 为论文图 5–7覆盖 10–150 个任务；任务数可超过车辆数，同一车辆可产生多个任务。
 task_count_range = [10, 150]
+# 论文只给出节点数上限，没有公开每次实验采用的节点数。生成器随任务数扩展基础设施，
+# 并始终受表 I 的 15 架无人机和 20 个路侧单元上限约束。
+tasks_per_uav = 10
+tasks_per_rsu = 6
+# 卸载映射阶段预留一部分 CPU 余量给通信与转发时延，避免先生成必然不可行的映射。
+cpu_admission_utilization = 0.75
 area_size_m = [1000.0, 1000.0]
-uav_altitude_range_m = [50.0, 150.0]
-vehicle_speed_range_mps = [5.0, 20.0]
+uav_altitude_range_m = [50.0, 200.0]
+vehicle_speed_range_mps = [10.0, 20.0]
 uav_speed_range_mps = [0.0, 10.0]
 remaining_resource_fraction_range = [0.6, 1.0]
-uav_bandwidth_range_hz = [8.0e7, 1.5e8]
+uav_bandwidth_range_hz = [1.0e8, 2.0e8]
 rsu_bandwidth_range_hz = [1.0e8, 4.0e8]
-uav_cpu_range_hz = [1.0e9, 2.0e9]
-rsu_cpu_range_hz = [2.0e9, 3.0e9]
-uav_power_range_w = [20.0, 40.0]
-rsu_power_range_w = [40.0, 70.0]
-task_input_bits_range = [4.0e5, 2.0e6]
-task_cpu_cycles_range = [1.0e8, 2.0e9]
-task_latency_range_s = [1.0, 5.0]
+uav_cpu_range_hz = [1.0e9, 2.5e9]
+rsu_cpu_range_hz = [1.0e9, 3.0e9]
+uav_power_range_w = [30.0, 50.0]
+rsu_power_range_w = [50.0, 70.0]
+# 下列数据量和计算量来自表 I；按 assumptions.units 中 1 KB=1000 bytes 换算为 bit。
+task_input_bits_range = [8.0e3, 4.0e6]
+task_cpu_cycles_range = [1.0e8, 1.0e10]
+# 论文没有给出任务截止期范围。10–50秒与表 I 的计算量及节点算力相匹配，
+# 避免旧的1–5秒假设使大规模场景在进入资源优化前就必然无解。
+task_latency_range_s = [10.0, 50.0]
 task_mode_probabilities = [0.4, 0.35, 0.25]
 ensure_all_task_modes = true
 vehicle_transmit_power_w = 0.2
@@ -126,8 +135,8 @@ log_score_std = 1.0
 minimum_score = 0.05
 maximum_score = 20.0
 deadline_violation_penalty = 2.0
-# 高负载趋势实验允许出现截止期违约；否则接近150个任务时通常无法生成样本。
-require_feasible_label = false
+# 修复后的节点扩展、CPU准入和截止期假设能够生成可行标签；失败场景必须重采样。
+require_feasible_label = true
 maximum_scenario_attempts = 20
 
 [assumptions.diffusion]
@@ -156,9 +165,19 @@ diffusion_learning_rate = 1.0e-4
 classifier_epochs = 50
 autoencoder_epochs = 100
 diffusion_epochs = 50
-batch_size = 8
+batch_size = 64
 gradient_clip_norm = 1.0
 gradient_checkpointing = true
+# RTX 5090（Blackwell）训练优化；BF16无需损失缩放且比FP16更稳定。
+amp_dtype = "bf16"
+allow_tf32 = true
+fused_optimizer = true
+channels_last = true
+pin_memory = true
+dataloader_workers = 0
+persistent_workers = false
+# 每轮原子覆盖最新检查点；中断后最多损失当前一轮。
+checkpoint_every_epochs = 1
 
 [experiments.dataset_generation]
 random_seed = 2026
@@ -166,6 +185,56 @@ train_samples = 64
 validation_samples = 16
 test_samples = 16
 output_directory = "outputs/diffusion_dataset"
+
+[experiments.dataset_validation]
+dataset_directory = "outputs/diffusion_dataset"
+profile = "formal"
+# 论文没有公开训练样本量；以下是当前58,230维环境编码的正式训练最低建议。
+minimum_train_samples = 8192
+minimum_validation_samples = 1024
+minimum_test_samples = 1024
+objective_batch_size = 32
+objective_absolute_tolerance = 1.0e-8
+objective_relative_tolerance = 1.0e-6
+minimum_bin_fraction = 0.01
+report = "outputs/diffusion_dataset/validation_report.json"
+
+[experiments.figure3_link_latency]
+# 图 3 未公开以下完整实验细节；固定任务和几何位置，仅重复采样遮挡与衰落。
+trials = 100
+random_seed = 202410896
+task_input_kb = 200.0
+output_ratio = 0.1
+bandwidth_hz = 1.0e7
+vehicle_transmit_power_w = 0.2
+uav_transmit_power_w = 30.0
+node_transmit_power_w = 50.0
+vehicle_antenna_gain_db = 5.0
+uav_antenna_gain_db = 10.0
+node_antenna_gain_db = 10.0
+# 图 3专门研究建筑物阻断地面直连的条件场景，不改变表 I 的全局随机遮挡概率。
+direct_force_blocked = true
+relay_force_los = true
+vehicle_position_m = [0.0, 0.0, 0.0]
+uav_position_m = [450.0, 0.0, 100.0]
+node_position_m = [900.0, 0.0, 0.0]
+output_csv = "outputs/figure3/link_latency_trials.csv"
+output_summary = "outputs/figure3/link_latency_summary.json"
+output_figure = "outputs/figure3/figure3_link_latency.png"
+
+[experiments.figure4_denoising_trace]
+# 论文正式图4记录1000步，并指出约200步已能兼顾效果和开销；这里采用200步低成本复现。
+checkpoint = "outputs/checkpoints/dm_jcr_200_steps.pt"
+dataset = "outputs/diffusion_dataset/test.npz"
+samples = 16
+random_seed = 2026
+denoising_steps = 200
+# 图 4展示DM-JCR自身去噪轨迹；论文的“只接受更优方案”规则明确用于基线算法。
+selection_rule = "raw"
+device = "auto"
+output_csv = "outputs/figure4/denoising_trace.csv"
+output_summary = "outputs/figure4/denoising_trace_summary.json"
+output_figure = "outputs/figure4/figure4_denoising_trace.png"
 
 [experiments.dynamic_channel]
 number_of_slots = 100

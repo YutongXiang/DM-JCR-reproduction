@@ -57,7 +57,10 @@ def main(argv: Sequence[str] | None = None) -> None:
             f"{split_names.get(name, name)}：样本数={information['samples']} "
             f"平均J={information['mean_objective']:.6f} "
             f"基线J={information['mean_baseline_objective']:.6f} "
-            f"可行比例={information['feasible_ratio']:.3f}"
+            f"总体可行比例={information['feasible_ratio']:.3f} "
+            f"资源可行比例={information['resource_feasible_ratio']:.3f} "
+            f"截止期全部满足比例={information['deadline_feasible_ratio']:.3f} "
+            f"单任务按时完成比例={information['mean_task_deadline_satisfied_ratio']:.3f}"
         )
 
 

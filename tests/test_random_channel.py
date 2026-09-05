@@ -129,6 +129,32 @@ def test_forced_blockage_uses_rayleigh():
     assert sample.shadow_factor <= 0.1
 
 
+def test_explicit_channel_condition_overrides_blockage_probability():
+    arguments = {
+        "vehicle_position": np.array([0.0, 0.0, 0.0]),
+        "node_position": np.array([100.0, 0.0, 100.0]),
+        "vehicle_gain_db": 5.0,
+        "node_gain_db": 5.0,
+    }
+    blocked = sample_random_channel(
+        np.random.default_rng(16),
+        blockage_probability=0.0,
+        forced_blocked=True,
+        **arguments,
+    )
+    los = sample_random_channel(
+        np.random.default_rng(17),
+        blockage_probability=1.0,
+        forced_blocked=False,
+        **arguments,
+    )
+
+    assert blocked.blocked is True
+    assert blocked.fading_model == "rayleigh"
+    assert los.blocked is False
+    assert los.fading_model == "rician"
+
+
 def test_random_link_is_reproducible():
     arguments = {
         "vehicle_position": np.array(

@@ -6,6 +6,7 @@ import numpy as np
 import torch
 
 from dm_jcr.config import load_config
+from dm_jcr.data_generation import generate_scenario, scenario_spec_from_config
 from dm_jcr.diffusion import (
     ConditionalUNet,
     DeterministicDiffusion,
@@ -19,9 +20,14 @@ from dm_jcr.diffusion_training import (
     EnvironmentPreprocessor,
     fit_environment_preprocessor,
     generate_resource_strategy,
+    generate_resource_strategy_trace,
     load_bundle,
+    load_training_bundle,
     save_bundle,
+    train_environment_classifier,
+    training_spec_from_config,
 )
+from dm_jcr.environment import encode_environment, tensor_spec_from_config
 
 
 def _bundle(environment_width: int, model_max_tasks: int = 3) -> DMJCRBundle:
@@ -94,6 +100,72 @@ def test_checkpoint_round_trip_and_inference_mask(tmp_path) -> None:
     np.testing.assert_array_equal(strategy[0, 2:], 0.0)
 
 
+def test_checkpoint_round_trip_preserves_resume_state_atomically(tmp_path) -> None:
+    bundle = _bundle(5)
+    checkpoint = tmp_path / "resume.pt"
+    training_state = {
+        "phase": "diffusion",
+        "completed_epochs": {"classifier": 1, "autoencoder": 1, "diffusion": 2},
+        "runtime": {"optimizer": {"state": {}, "param_groups": []}},
+    }
+
+    save_bundle(bundle, checkpoint, {"diffusion": [2.0, 1.0]}, training_state)
+    _, history, restored = load_training_bundle(checkpoint, torch.device("cpu"))
+
+    assert history == {"diffusion": [2.0, 1.0]}
+    assert restored == training_state
+    assert not (tmp_path / "resume.pt.tmp").exists()
+
+
+def test_classifier_training_can_resume_from_epoch_runtime() -> None:
+    config = load_config()
+    model_spec = replace(
+        diffusion_spec_from_config(config),
+        environment_categories=2,
+        classifier_hidden_sizes=(8, 4),
+    )
+    training_spec = replace(
+        training_spec_from_config(config),
+        classifier_epochs=1,
+        batch_size=2,
+        amp_dtype="off",
+        fused_optimizer=False,
+        pin_memory=False,
+    )
+    environments = np.array(
+        [[0.0, 0.0], [0.1, 0.0], [1.0, 1.0], [1.1, 1.0]], dtype=np.float32
+    )
+    categories = np.array([0, 0, 1, 1], dtype=np.int64)
+    classifier = EnvironmentClassifier(2, model_spec)
+    captured = {}
+
+    def remember(epoch, losses, runtime):
+        captured.update(epoch=epoch, losses=list(losses), runtime=runtime)
+
+    first = train_environment_classifier(
+        classifier,
+        environments,
+        categories,
+        training_spec,
+        torch.device("cpu"),
+        epoch_callback=remember,
+    )
+    second = train_environment_classifier(
+        classifier,
+        environments,
+        categories,
+        replace(training_spec, classifier_epochs=2),
+        torch.device("cpu"),
+        start_epoch=1,
+        history=first,
+        runtime_state=captured["runtime"],
+    )
+
+    assert captured["epoch"] == 1
+    assert len(second) == 2
+    assert all(np.isfinite(second))
+
+
 def test_inference_supports_150_compact_tasks() -> None:
     bundle = _bundle(5, model_max_tasks=150)
     environment = np.zeros((1, 5), dtype=np.float64)
@@ -115,3 +187,34 @@ def test_inference_supports_150_compact_tasks() -> None:
     assert strategy.shape == (1, 150, 8)
     assert np.all(np.isfinite(strategy))
     assert np.all(strategy >= 0.0)
+
+
+def test_generation_trace_records_initial_and_each_reverse_step() -> None:
+    config = load_config()
+    scenario_spec = replace(
+        scenario_spec_from_config(config),
+        task_count_range=(3, 3),
+    )
+    scenario = generate_scenario(np.random.default_rng(29), 0, scenario_spec)
+    encoded = encode_environment(scenario.snapshot, tensor_spec_from_config(config))
+    environment = encoded.flat_vector()[None, :]
+    bundle = _bundle(environment.shape[1], model_max_tasks=3)
+
+    trace = generate_resource_strategy_trace(
+        bundle,
+        environment,
+        encoded.node_features[None, ...],
+        encoded.channel_gains[None, ...],
+        encoded.task_features[None, ...],
+        encoded.task_node_indices[None, ...],
+        encoded.task_mask[None, ...],
+        torch.device("cpu"),
+        random_seed=29,
+        denoising_steps=2,
+    )
+
+    np.testing.assert_array_equal(trace.generation_steps, [0, 1, 2])
+    np.testing.assert_array_equal(trace.diffusion_timesteps, [2, 1, 0])
+    assert trace.raw_weighted_objective.shape == (3, 1)
+    assert np.all(np.isfinite(trace.raw_weighted_objective))
+    assert np.all(np.diff(trace.best_weighted_objective[:, 0]) <= 0.0)

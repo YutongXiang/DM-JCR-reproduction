@@ -6,6 +6,7 @@ import pytest
 from dm_jcr.channel import achievable_rate_bps
 from dm_jcr.resource_allocation import (
     DirectTaskContext,
+    Equation17ProjectedStrategy,
     FeasibleTaskAllocation,
     NodeResourceCapacity,
     ObjectiveNormalization,
@@ -15,6 +16,7 @@ from dm_jcr.resource_allocation import (
     project_resource_strategy,
     proportional_normalize,
     verify_resource_constraints,
+    verify_equation17_resource_constraints,
 )
 from dm_jcr.task_model import ComputationTask
 
@@ -55,6 +57,23 @@ def test_projection_enforces_three_resource_totals_per_node() -> None:
     assert rsu[0].bandwidth_hz == pytest.approx(80.0)
     assert rsu[0].cpu_frequency_hz == pytest.approx(300.0)
     assert rsu[0].node_transmit_power_w == pytest.approx(50.0)
+
+
+def test_equation17_resource_check_uses_scale_aware_tolerance() -> None:
+    capacity = NodeResourceCapacity("rsu-1", 1.0e8, 1.0e9, 50.0)
+    rounding_only = Equation17ProjectedStrategy(
+        (FeasibleTaskAllocation("t1", "rsu-1", 1.0e8, 1.0e9 + 1.0e-6, 50.0),),
+        (),
+        (),
+    )
+    actual_violation = Equation17ProjectedStrategy(
+        (FeasibleTaskAllocation("t1", "rsu-1", 1.0e8, 1.0e9 + 1.0e-2, 50.0),),
+        (),
+        (),
+    )
+
+    assert verify_equation17_resource_constraints(rounding_only, [capacity])
+    assert not verify_equation17_resource_constraints(actual_violation, [capacity])
 
 
 def _example_context(max_latency_s: float = 10.0) -> DirectTaskContext:

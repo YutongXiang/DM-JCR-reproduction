@@ -317,10 +317,27 @@ def save_results(
     trials = [item.trial for item in records]
     direct = [item.direct_latency_ms for item in records]
     relay = [item.relay_latency_ms for item in records]
-    figure, axis = plt.subplots(figsize=(9.0, 4.8))
-    axis.plot(trials, direct, linewidth=1.35, label="Direct link")
-    axis.plot(trials, relay, linewidth=1.35, label="UAV relay")
-    axis.set_xlabel("Experiment index")
+    figure, axis = plt.subplots(figsize=(6.4, 4.8))
+    axis.plot(
+        trials,
+        direct,
+        color="tab:blue",
+        marker="o",
+        markerfacecolor="none",
+        markersize=4.0,
+        linewidth=1.0,
+        label="Direct link",
+    )
+    axis.plot(
+        trials,
+        relay,
+        color="tab:orange",
+        marker="x",
+        markersize=4.0,
+        linewidth=1.0,
+        label="UAV relay",
+    )
+    axis.set_xlabel("Number of Experiments")
     axis.set_ylabel("Transmission latency (ms)")
     axis.grid(alpha=0.25)
     axis.legend()

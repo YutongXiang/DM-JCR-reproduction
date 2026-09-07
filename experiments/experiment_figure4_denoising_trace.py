@@ -220,7 +220,7 @@ def save_results(config: Figure4Config, trace: StrategyGenerationTrace) -> dict[
         json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
-    figure, axis = plt.subplots(figsize=(7.2, 4.8))
+    figure, axis = plt.subplots(figsize=(6.4, 4.8))
     axis.plot(trace.generation_steps, mean_weighted, color="red", linewidth=1.5, label="DM-JCR")
     axis.set_xlabel("Generating Epoch")
     axis.set_ylabel("Normalized Average Weighted Indicator")

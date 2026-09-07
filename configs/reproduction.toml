@@ -224,7 +224,7 @@ output_figure = "outputs/figure3/figure3_link_latency.png"
 
 [experiments.figure4_denoising_trace]
 # 论文正式图4记录1000步，并指出约200步已能兼顾效果和开销；这里采用200步低成本复现。
-checkpoint = "outputs/checkpoints/dm_jcr_200_steps.pt"
+checkpoint = "outputs/checkpoints/dm_jcr_200_steps_bs512.pt"
 dataset = "outputs/diffusion_dataset/test.npz"
 samples = 16
 random_seed = 2026
@@ -235,6 +235,65 @@ device = "auto"
 output_csv = "outputs/figure4/denoising_trace.csv"
 output_summary = "outputs/figure4/denoising_trace_summary.json"
 output_figure = "outputs/figure4/figure4_denoising_trace.png"
+
+[experiments.figure5_task_latency]
+# 论文图5的任务规模范围为10–150；图中各点的独立重复次数未公开。
+checkpoint = "outputs/checkpoints/dm_jcr_200_steps_bs512.pt"
+task_counts = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150]
+trials_per_point = 20
+random_seed = 202605
+denoising_steps = 200
+# 批量推理只改变执行效率，不改变每个场景的资源约束投影和评价方法。
+inference_batch_size = 32
+device = "auto"
+output_csv = "outputs/figure5/dm_jcr_task_latency_trials.csv"
+output_summary = "outputs/figure5/dm_jcr_task_latency_summary.json"
+output_figure = "outputs/figure5/figure5_dm_jcr_task_latency.png"
+
+[experiments.figure6_task_energy]
+# 与图5采用配对的场景种子和任务规模，使时延与能耗曲线可以公平对照。
+checkpoint = "outputs/checkpoints/dm_jcr_200_steps_bs512.pt"
+task_counts = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150]
+trials_per_point = 20
+random_seed = 202605
+denoising_steps = 200
+inference_batch_size = 32
+device = "auto"
+output_csv = "outputs/figure6/dm_jcr_task_energy_trials.csv"
+output_summary = "outputs/figure6/dm_jcr_task_energy_summary.json"
+output_figure = "outputs/figure6/figure6_dm_jcr_task_energy.png"
+
+[experiments.figure7_weighted_indicator]
+# 与图5和图6使用完全相同的场景设置，绘制时延和能耗的归一化加权指标。
+checkpoint = "outputs/checkpoints/dm_jcr_200_steps_bs512.pt"
+task_counts = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150]
+trials_per_point = 20
+random_seed = 202605
+denoising_steps = 200
+inference_batch_size = 32
+device = "auto"
+output_csv = "outputs/figure7/dm_jcr_weighted_indicator_trials.csv"
+output_summary = "outputs/figure7/dm_jcr_weighted_indicator_summary.json"
+output_figure = "outputs/figure7/figure7_dm_jcr_weighted_indicator.png"
+
+[experiments.paper_reproduction_comparison]
+# 将论文图3至图7与当前复现结果逐行并排，便于检查坐标、趋势和数值差异。
+figure_numbers = [3, 4, 5, 6, 7]
+paper_figures = [
+    "outputs/paper_reference/page13/3_Im3.png",
+    "outputs/paper_reference/page13/4_Im4.png",
+    "outputs/paper_reference/page13/1_Im5.png",
+    "outputs/paper_reference/page13/2_Im6.png",
+    "outputs/paper_reference/page13/0_Im7.png",
+]
+reproduction_figures = [
+    "outputs/figure3/figure3_link_latency.png",
+    "outputs/figure4/figure4_denoising_trace.png",
+    "outputs/figure5/figure5_dm_jcr_task_latency.png",
+    "outputs/figure6/figure6_dm_jcr_task_energy.png",
+    "outputs/figure7/figure7_dm_jcr_weighted_indicator.png",
+]
+output_figure = "outputs/comparison/paper_vs_reproduction_figures_3_7.png"
 
 [experiments.dynamic_channel]
 number_of_slots = 100
